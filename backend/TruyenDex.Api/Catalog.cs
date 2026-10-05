@@ -35,8 +35,8 @@ public record ChapterPage(List<ChapterCard> Items, int Total, int Page, int Page
 public record ReaderData(ChapterCard Chapter, MangaCard Manga, string[] Pages, string[] DataSaverPages, string? ExternalUrl, List<ChapterCard> Navigation);
 public class UpstreamException(string message, int status = 502) : Exception(message) { public int Status { get; } = status; }
 
-// Read-only adapter. Integrates MangaDex/TruyenDex and TruyenGGVN with title deduplication.
-public class Catalog(HttpClient http, IMemoryCache cache, TruyenGg truyengg, IConnectionMultiplexer? redis = null, MeilisearchClient? meili = null)
+// Read-only adapter. Integrates MangaDex/TruyenDex, TruyenGGVN, VinaHentai, SayHentai, and HentaiVN.
+public class Catalog(HttpClient http, IMemoryCache cache, TruyenGg truyengg, VinaHentai vinahentai, SayHentai sayhentai, HentaiVn hentaivn, IConnectionMultiplexer? redis = null, MeilisearchClient? meili = null)
 {
     private static readonly SemaphoreSlim Gate = new(6, 6);
     private static readonly string[] SiteOrigins = ["https://api.truyendex.cc", "https://api.truyendex.xyz"];
@@ -299,6 +299,42 @@ public class Catalog(HttpClient http, IMemoryCache cache, TruyenGg truyengg, ICo
             await sem.WaitAsync(cts.Token);
             try
             {
+                var vSlug = await vinahentai.ResolveSlug(m.Id);
+                if (!string.IsNullOrEmpty(vSlug))
+                {
+                    var chaps = await vinahentai.GetChapters(m.Id, 1, 10, ascending: false);
+                    if (chaps != null && chaps.Items.Count > 0)
+                    {
+                        var existing = m.Chapters ?? [];
+                        m.Chapters = DeduplicateChapters(existing.Concat(chaps.Items), ascending: false).Take(targetCount).ToList();
+                        return;
+                    }
+                }
+
+                var hSlug = await hentaivn.ResolveSlug(m.Id);
+                if (!string.IsNullOrEmpty(hSlug))
+                {
+                    var chaps = await hentaivn.GetChapters(m.Id, 1, 10, ascending: false);
+                    if (chaps != null && chaps.Items.Count > 0)
+                    {
+                        var existing = m.Chapters ?? [];
+                        m.Chapters = DeduplicateChapters(existing.Concat(chaps.Items), ascending: false).Take(targetCount).ToList();
+                        return;
+                    }
+                }
+
+                var sSlug = await sayhentai.ResolveSlug(m.Id);
+                if (!string.IsNullOrEmpty(sSlug))
+                {
+                    var chaps = await sayhentai.GetChapters(m.Id, 1, 10, ascending: false);
+                    if (chaps != null && chaps.Items.Count > 0)
+                    {
+                        var existing = m.Chapters ?? [];
+                        m.Chapters = DeduplicateChapters(existing.Concat(chaps.Items), ascending: false).Take(targetCount).ToList();
+                        return;
+                    }
+                }
+
                 var slug = await truyengg.ResolveSlug(m.Id);
                 if (!string.IsNullOrEmpty(slug))
                 {
@@ -307,6 +343,7 @@ public class Catalog(HttpClient http, IMemoryCache cache, TruyenGg truyengg, ICo
                     {
                         var existing = m.Chapters ?? [];
                         m.Chapters = DeduplicateChapters(existing.Concat(chaps.Items), ascending: false).Take(targetCount).ToList();
+                        return;
                     }
                 }
                 else
@@ -344,15 +381,34 @@ public class Catalog(HttpClient http, IMemoryCache cache, TruyenGg truyengg, ICo
 
     public async Task<CatalogPage> Home(int page, int size)
     {
-        var cacheKey = $"catalog:home:v14:{page}:{size}";
+        var cacheKey = $"catalog:home:vinahentai:v1:{page}:{size}";
         var cachedPage = await CacheGet<CatalogPage>(cacheKey);
         if (cachedPage != null) return cachedPage;
 
+        // 1. Fetch latest updated manga from VinaHentai
+        var vinaItems = new List<MangaCard>();
+        try
+        {
+            vinaItems = await vinahentai.GetLatest(page);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Catalog.Home] VinaHentai fetch warning: {ex.Message}");
+        }
+
+        if (vinaItems != null && vinaItems.Count > 0)
+        {
+            const int totalEstimated = 39680;
+            var result = new CatalogPage(vinaItems, totalEstimated, page, vinaItems.Count);
+            await CacheSet(cacheKey, result, TimeSpan.FromMinutes(10));
+            return result;
+        }
+
+        // 2. Fallback to MangaDex / TruyenGG if VinaHentai is temporarily unreachable
         size = 28;
         var mangaDexItems = new List<MangaCard>();
         int total = 0;
 
-        // Kick off TruyenGG fetch in parallel with MangaDex fetch
         var ggTask = Task.Run(async () =>
         {
             try
@@ -375,7 +431,6 @@ public class Catalog(HttpClient http, IMemoryCache cache, TruyenGg truyengg, ICo
                 foreach (var row in rows) {
                     if (!map.TryGetValue(S(row?["uuid"]), out var m)) continue;
                     if (IsManhwaOrManhua(m)) continue;
-                    // Preserve homepage order: last chapter update descending, not manga metadata update.
                     m.UpdatedAt = Date(row?["last_chapter_updated_at"]);
                     var rawChaps = row?["chapters"]?.AsArray().Select(c => {
                         var chapTitle = S(c?["title"]);
@@ -396,7 +451,6 @@ public class Catalog(HttpClient http, IMemoryCache cache, TruyenGg truyengg, ICo
         }
         catch (Exception)
         {
-            // Fallback to MangaDex latest uploaded chapters feed if TruyenDex custom homepage endpoint is temporarily unavailable
             try
             {
                 var fallback = await Search(page, size, null, null, null, "ja", null, "vi", "latest", null);
@@ -409,10 +463,8 @@ public class Catalog(HttpClient http, IMemoryCache cache, TruyenGg truyengg, ICo
             catch { }
         }
 
-        // Await TruyenGG items
         var ggItems = await ggTask;
 
-        // Deduplication: if title or alternative title matches any existing item, prioritize the one with Chapter 1
         var merged = new List<MangaCard>();
         foreach (var m in mangaDexItems)
         {
@@ -423,7 +475,6 @@ public class Catalog(HttpClient http, IMemoryCache cache, TruyenGg truyengg, ICo
                 if (TruyenGg.IsSameManga(existing.Title, existing.AlternativeTitle, m.Title, m.AlternativeTitle))
                 {
                     isDuplicate = true;
-                    // Prioritize story with chapter 1
                     if (ShouldPreferCandidate(m, existing))
                     {
                         merged[i] = m;
@@ -446,7 +497,6 @@ public class Catalog(HttpClient http, IMemoryCache cache, TruyenGg truyengg, ICo
                 if (TruyenGg.IsSameManga(existing.Title, existing.AlternativeTitle, gg.Title, gg.AlternativeTitle))
                 {
                     isDuplicate = true;
-                    // Prioritize story with chapter 1
                     if (ShouldPreferCandidate(gg, existing))
                     {
                         merged[i] = gg;
@@ -460,22 +510,58 @@ public class Catalog(HttpClient http, IMemoryCache cache, TruyenGg truyengg, ICo
             }
         }
 
-        // Exclude any remaining Manhwa/Manhua items, sort by newest chapter update descending, and take page size
         merged = merged.Where(m => !IsManhwaOrManhua(m)).OrderByDescending(x => x.UpdatedAt).Take(size).ToList();
         await EnsureTopChapters(merged, 3);
 
-        var result = new CatalogPage(merged, total + ggItems.Count, page, size);
-        await CacheSet(cacheKey, result, TimeSpan.FromMinutes(15));
-        return result;
+        var fallbackResult = new CatalogPage(merged, total + ggItems.Count, page, size);
+        await CacheSet(cacheKey, fallbackResult, TimeSpan.FromMinutes(15));
+        return fallbackResult;
     }
 
     public async Task<CatalogPage> Featured(int size = 20)
     {
-        var cacheKey = $"catalog:featured:manhwa_manhua:v3:{size}";
+        var cacheKey = $"catalog:featured:hentaivn:v1:{size}";
         var cached = await CacheGet<CatalogPage>(cacheKey);
         if (cached != null) return cached;
 
-        // 1. Fetch from TruyenGG (Korean Manhwa & Chinese Manhua)
+        // 1. Fetch latest Manhwa from HentaiVN (https://www.hentaivnx1.com/tim-truyen/manhwa?page=1)
+        List<MangaCard> hvnItems = [];
+        try
+        {
+            hvnItems = await hentaivn.GetLatestManhwa(1);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Catalog.Featured] HentaiVN fetch warning: {ex.Message}");
+        }
+
+        if (hvnItems != null && hvnItems.Count > 0)
+        {
+            var finalItems = hvnItems.Take(size).ToList();
+            await EnsureTopChapters(finalItems, 3);
+            var res = new CatalogPage(finalItems, Math.Max(1000, finalItems.Count), 1, size);
+            await CacheSet(cacheKey, res, TimeSpan.FromMinutes(10));
+            return res;
+        }
+
+        // 2. Fallback to SayHentai & TruyenGG
+        List<MangaCard> sayItems = [];
+        try
+        {
+            sayItems = await sayhentai.GetLatestManhwa(1);
+        }
+        catch { }
+
+        if (sayItems != null && sayItems.Count > 0)
+        {
+            var finalItems = sayItems.Take(size).ToList();
+            await EnsureTopChapters(finalItems, 3);
+            var res = new CatalogPage(finalItems, Math.Max(1000, finalItems.Count), 1, size);
+            await CacheSet(cacheKey, res, TimeSpan.FromMinutes(10));
+            return res;
+        }
+
+        // 2. Fallback to TruyenGG (Korean Manhwa & Chinese Manhua) & MangaDex
         List<MangaCard> ggItems = [];
         try
         {
@@ -483,7 +569,6 @@ public class Catalog(HttpClient http, IMemoryCache cache, TruyenGg truyengg, ICo
         }
         catch { }
 
-        // 2. Fetch from MangaDex (ko & zh) with Vietnamese translation
         List<MangaCard> mdItems = [];
         try
         {
@@ -495,7 +580,6 @@ public class Catalog(HttpClient http, IMemoryCache cache, TruyenGg truyengg, ICo
         }
         catch { }
 
-        // 3. Merge & Deduplicate
         var merged = new List<MangaCard>();
         foreach (var m in mdItems)
         {
@@ -543,11 +627,11 @@ public class Catalog(HttpClient http, IMemoryCache cache, TruyenGg truyengg, ICo
             }
         }
 
-        var finalItems = merged.OrderByDescending(x => x.UpdatedAt).Take(size).ToList();
-        await EnsureTopChapters(finalItems, 3);
-        var res = new CatalogPage(finalItems, finalItems.Count, 1, size);
-        await CacheSet(cacheKey, res, TimeSpan.FromMinutes(5));
-        return res;
+        var fallbackItems = merged.OrderByDescending(x => x.UpdatedAt).Take(size).ToList();
+        await EnsureTopChapters(fallbackItems, 3);
+        var fallbackRes = new CatalogPage(fallbackItems, fallbackItems.Count, 1, size);
+        await CacheSet(cacheKey, fallbackRes, TimeSpan.FromMinutes(5));
+        return fallbackRes;
     }
 
     private static int GetRelevanceScore(MangaCard m, string q)
@@ -574,7 +658,7 @@ public class Catalog(HttpClient http, IMemoryCache cache, TruyenGg truyengg, ICo
 
     public async Task<CatalogPage> Search(int page, int size, string? q, string? genre, string? status, string? country, string? demographic, string? language, string? sort, int? year)
     {
-        var cacheKey = $"catalog:search:v11:{page}:{size}:{q}:{genre}:{status}:{country}:{demographic}:{language}:{sort}:{year}";
+        var cacheKey = $"catalog:search:v12:{page}:{size}:{q}:{genre}:{status}:{country}:{demographic}:{language}:{sort}:{year}";
         var cachedSearch = await CacheGet<CatalogPage>(cacheKey);
         if (cachedSearch != null)
         {
@@ -614,7 +698,12 @@ public class Catalog(HttpClient http, IMemoryCache cache, TruyenGg truyengg, ICo
         var items = new List<MangaCard>();
         int total = 0;
 
-        // Run MangaDex search and TruyenGG search in parallel
+        bool isKorea = !string.IsNullOrWhiteSpace(country) && (country.Contains("ko", StringComparison.OrdinalIgnoreCase) || country.Contains("manhwa", StringComparison.OrdinalIgnoreCase));
+        bool isJapan = !string.IsNullOrWhiteSpace(country) && (country.Contains("ja", StringComparison.OrdinalIgnoreCase) || country.Contains("manga", StringComparison.OrdinalIgnoreCase));
+        bool isChina = !string.IsNullOrWhiteSpace(country) && (country.Contains("zh", StringComparison.OrdinalIgnoreCase) || country.Contains("manhua", StringComparison.OrdinalIgnoreCase));
+        bool noCountryFilter = string.IsNullOrWhiteSpace(country);
+
+        // Run MangaDex search, SayHentai, VinaHentai, and TruyenGG in parallel
         var mdTask = Task.Run(async () =>
         {
             try
@@ -646,23 +735,64 @@ public class Catalog(HttpClient http, IMemoryCache cache, TruyenGg truyengg, ICo
             }
         });
 
+        var vinaTask = !string.IsNullOrWhiteSpace(q)
+            ? vinahentai.Search(q, page)
+            : (isJapan || (noCountryFilter && string.IsNullOrEmpty(genre)) ? vinahentai.GetLatest(page) : Task.FromResult(new List<MangaCard>()));
+
+        var hvnTask = !string.IsNullOrWhiteSpace(q)
+            ? hentaivn.Search(q, page)
+            : (isKorea || (noCountryFilter && string.IsNullOrEmpty(genre)) ? hentaivn.GetLatestManhwa(page) : Task.FromResult(new List<MangaCard>()));
+
+        var sayTask = !string.IsNullOrWhiteSpace(q)
+            ? sayhentai.Search(q, page)
+            : (isKorea || (noCountryFilter && string.IsNullOrEmpty(genre)) ? sayhentai.GetLatestManhwa(page) : Task.FromResult(new List<MangaCard>()));
+
         var ggTask = !string.IsNullOrWhiteSpace(q)
             ? truyengg.Search(q, page)
-            : Task.FromResult(new List<MangaCard>());
+            : (isKorea || isChina ? truyengg.GetLatestManhwaManhua(page) : Task.FromResult(new List<MangaCard>()));
 
-        await Task.WhenAll(mdTask, ggTask);
+        await Task.WhenAll(mdTask, ggTask, vinaTask, hvnTask, sayTask);
 
         var (rawItems, mdTotal) = await mdTask;
         var ggResults = await ggTask;
+        var vinaResults = await vinaTask;
+        var hvnResults = await hvnTask;
+        var sayResults = await sayTask;
         total = mdTotal;
 
-        // 1. Add TruyenGG results first
-        foreach (var gg in ggResults)
+        if (isKorea && (hvnResults.Count > 0 || sayResults.Count > 0))
         {
-            items.Add(gg);
+            total = Math.Max(total, 1200);
+        }
+        else if (isJapan && vinaResults.Count > 0)
+        {
+            total = Math.Max(total, 39680);
         }
 
-        // 2. Add MangaDex results, merging/deduplicating against TruyenGG
+        // 1. If Korea filter, HentaiVN & SayHentai are prioritized
+        if (isKorea)
+        {
+            foreach (var h in hvnResults) items.Add(h);
+            foreach (var s in sayResults)
+            {
+                if (!items.Any(existing => TruyenGg.IsSameManga(existing.Title, existing.AlternativeTitle, s.Title, s.AlternativeTitle)))
+                    items.Add(s);
+            }
+            foreach (var gg in ggResults)
+            {
+                if (!items.Any(existing => TruyenGg.IsSameManga(existing.Title, existing.AlternativeTitle, gg.Title, gg.AlternativeTitle)))
+                    items.Add(gg);
+            }
+        }
+        else
+        {
+            foreach (var v in vinaResults) items.Add(v);
+            foreach (var h in hvnResults) items.Add(h);
+            foreach (var s in sayResults) items.Add(s);
+            foreach (var gg in ggResults) items.Add(gg);
+        }
+
+        // 2. Add MangaDex results, merging/deduplicating against existing results
         foreach (var m in rawItems)
         {
             bool isDuplicate = false;
@@ -798,9 +928,30 @@ public class Catalog(HttpClient http, IMemoryCache cache, TruyenGg truyengg, ICo
 
     public async Task<MangaCard> Detail(Guid id)
     {
-        var cacheKey = $"catalog:detail:v5:{id}";
+        var cacheKey = $"catalog:detail:v8:{id}";
         var cachedManga = await CacheGet<MangaCard>(cacheKey);
         if (cachedManga != null) return cachedManga;
+
+        var vinaManga = await vinahentai.GetDetail(id);
+        if (vinaManga != null)
+        {
+            await CacheSet(cacheKey, vinaManga, TimeSpan.FromMinutes(20));
+            return vinaManga;
+        }
+
+        var hvnManga = await hentaivn.GetDetail(id);
+        if (hvnManga != null)
+        {
+            await CacheSet(cacheKey, hvnManga, TimeSpan.FromMinutes(20));
+            return hvnManga;
+        }
+
+        var sayManga = await sayhentai.GetDetail(id);
+        if (sayManga != null)
+        {
+            await CacheSet(cacheKey, sayManga, TimeSpan.FromMinutes(20));
+            return sayManga;
+        }
 
         var ggManga = await truyengg.GetDetail(id);
         if (ggManga != null)
@@ -832,9 +983,33 @@ public class Catalog(HttpClient http, IMemoryCache cache, TruyenGg truyengg, ICo
 
     public async Task<List<ChapterCard>> GetAllChapters(Guid id, string language)
     {
-        var cacheKey = $"catalog:all_chapters:v5:{id}:{language}";
+        var cacheKey = $"catalog:all_chapters:v8:{id}:{language}";
         var cached = await CacheGet<List<ChapterCard>>(cacheKey);
         if (cached != null && cached.Count > 0) return cached;
+
+        var vinaChaps = await vinahentai.GetChapters(id, 1, 1000, ascending: true);
+        if (vinaChaps != null && vinaChaps.Items.Count > 0)
+        {
+            var cleanVina = DeduplicateChapters(vinaChaps.Items, ascending: true);
+            await CacheSet(cacheKey, cleanVina, TimeSpan.FromMinutes(20));
+            return cleanVina;
+        }
+
+        var hvnChaps = await hentaivn.GetChapters(id, 1, 1000, ascending: true);
+        if (hvnChaps != null && hvnChaps.Items.Count > 0)
+        {
+            var cleanHvn = DeduplicateChapters(hvnChaps.Items, ascending: true);
+            await CacheSet(cacheKey, cleanHvn, TimeSpan.FromMinutes(20));
+            return cleanHvn;
+        }
+
+        var sayChaps = await sayhentai.GetChapters(id, 1, 1000, ascending: true);
+        if (sayChaps != null && sayChaps.Items.Count > 0)
+        {
+            var cleanSay = DeduplicateChapters(sayChaps.Items, ascending: true);
+            await CacheSet(cacheKey, cleanSay, TimeSpan.FromMinutes(20));
+            return cleanSay;
+        }
 
         var ggChaps = await truyengg.GetChapters(id, 1, 1000, ascending: true);
         if (ggChaps != null && ggChaps.Items.Count > 0)
@@ -921,9 +1096,93 @@ public class Catalog(HttpClient http, IMemoryCache cache, TruyenGg truyengg, ICo
 
     public async Task<ReaderData> Read(Guid id)
     {
-        var cacheKey = $"catalog:reader:v7:{id}";
+        var cacheKey = $"catalog:reader:v8:{id}";
         var cachedReader = await CacheGet<ReaderData>(cacheKey);
         if (cachedReader != null) return cachedReader;
+
+        var vinaReader = await vinahentai.GetReader(id);
+        if (vinaReader != null)
+        {
+            var mangaId = vinaReader.Chapter.MangaId;
+            var manga = mangaId != Guid.Empty ? await Detail(mangaId) : null;
+            var nav = mangaId != Guid.Empty ? await GetAllChapters(mangaId, "vi") : null;
+            if (nav == null || nav.Count == 0)
+            {
+                nav = vinaReader.Navigation;
+            }
+            if (!nav.Any(x => x.Id == id))
+            {
+                nav.Add(vinaReader.Chapter);
+                nav = DeduplicateChapters(nav, ascending: true);
+            }
+
+            var finalReader = new ReaderData(
+                vinaReader.Chapter,
+                manga ?? vinaReader.Manga,
+                vinaReader.Pages,
+                vinaReader.DataSaverPages,
+                vinaReader.ExternalUrl,
+                nav
+            );
+            await CacheSet(cacheKey, finalReader, TimeSpan.FromMinutes(30));
+            return finalReader;
+        }
+
+        var hvnReader = await hentaivn.GetReader(id);
+        if (hvnReader != null)
+        {
+            var mangaId = hvnReader.Chapter.MangaId;
+            var manga = mangaId != Guid.Empty ? await Detail(mangaId) : null;
+            var nav = mangaId != Guid.Empty ? await GetAllChapters(mangaId, "vi") : null;
+            if (nav == null || nav.Count == 0)
+            {
+                nav = hvnReader.Navigation;
+            }
+            if (!nav.Any(x => x.Id == id))
+            {
+                nav.Add(hvnReader.Chapter);
+                nav = DeduplicateChapters(nav, ascending: true);
+            }
+
+            var finalReader = new ReaderData(
+                hvnReader.Chapter,
+                manga ?? hvnReader.Manga,
+                hvnReader.Pages,
+                hvnReader.DataSaverPages,
+                hvnReader.ExternalUrl,
+                nav
+            );
+            await CacheSet(cacheKey, finalReader, TimeSpan.FromMinutes(30));
+            return finalReader;
+        }
+
+        var sayReader = await sayhentai.GetReader(id);
+        if (sayReader != null)
+        {
+            var mangaId = sayReader.Chapter.MangaId;
+            var manga = mangaId != Guid.Empty ? await Detail(mangaId) : null;
+            var nav = mangaId != Guid.Empty ? await GetAllChapters(mangaId, "vi") : null;
+            if (nav == null || nav.Count == 0)
+            {
+                nav = sayReader.Navigation;
+            }
+            if (!nav.Any(x => x.Id == id))
+            {
+                nav.Add(sayReader.Chapter);
+                nav = DeduplicateChapters(nav, ascending: true);
+            }
+
+            var finalReader = new ReaderData(
+                sayReader.Chapter,
+                manga ?? sayReader.Manga,
+                sayReader.Pages,
+                sayReader.DataSaverPages,
+                sayReader.ExternalUrl,
+                nav
+            );
+            await CacheSet(cacheKey, finalReader, TimeSpan.FromMinutes(30));
+            return finalReader;
+        }
 
         var ggReader = await truyengg.GetReader(id);
         if (ggReader != null)

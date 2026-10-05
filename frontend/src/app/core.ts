@@ -68,7 +68,7 @@ export function proxyImage(url: string): string {
   if (url.includes('.mangadex.network/') || url.includes('mangadex.org/')) {
     return 'https://services.f-ck.me/v1/image/' + btoa(url).replace(/\+/g, '-').replace(/\//g, '_');
   }
-  if (url.includes('hinhtruyen.com') || url.includes('hinhhinh.com') || url.includes('truyenggvn.com') || url.includes('truyenvua') || url.includes('tintruyen') || url.includes('blogspot.com')) {
+  if (url.includes('hinhtruyen.com') || url.includes('hinhhinh.com') || url.includes('truyenggvn.com') || url.includes('truyenvua') || url.includes('tintruyen') || url.includes('blogspot.com') || url.includes('vinahentai') || url.includes('vnht.') || url.includes('sayhentai') || url.includes('pubtranxzyzz') || url.includes('hentaivn') || url.includes('2tcdn')) {
     return '/api/catalog/image-proxy?url=' + encodeURIComponent(url);
   }
   return url;

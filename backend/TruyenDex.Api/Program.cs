@@ -39,7 +39,13 @@ if (!string.IsNullOrWhiteSpace(meiliUrl)) {
 
 builder.Services.AddHttpClient<Catalog>(c => { c.Timeout = TimeSpan.FromSeconds(15); c.DefaultRequestHeaders.UserAgent.ParseAdd("TruyenDexClone/1.0"); });
 builder.Services.AddHttpClient<TruyenGg>(c => { c.Timeout = TimeSpan.FromSeconds(15); c.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"); });
+builder.Services.AddHttpClient<VinaHentai>(c => { c.Timeout = TimeSpan.FromSeconds(15); c.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"); });
+builder.Services.AddHttpClient<SayHentai>(c => { c.Timeout = TimeSpan.FromSeconds(15); c.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"); });
+builder.Services.AddHttpClient<HentaiVn>(c => { c.Timeout = TimeSpan.FromSeconds(15); c.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"); });
 builder.Services.AddSingleton<TruyenGg>();
+builder.Services.AddSingleton<VinaHentai>();
+builder.Services.AddSingleton<SayHentai>();
+builder.Services.AddSingleton<HentaiVn>();
 builder.Services.AddScoped<Catalog>();
 builder.Services.AddScoped<PasswordHasher<AppUser>>();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o => o.TokenValidationParameters = new() {
@@ -436,6 +442,18 @@ app.MapGet("/api/catalog/image-proxy", async (string url, HttpContext ctx, IHttp
     if (uri.Host.Contains("truyengg") || uri.Host.Contains("hinhhinh") || uri.Host.Contains("hinhtruyen") || uri.Host.Contains("truyenvua") || uri.Host.Contains("tintruyen") || uri.Host.Contains("blogspot") || uri.Host.Contains("bp.blogspot") || uri.Host.Contains("nettruyen") || uri.Host.Contains("nettrom"))
     {
         req.Headers.Referrer = new Uri("https://truyenggvn.com/");
+    }
+    else if (uri.Host.Contains("vinahentai") || uri.Host.Contains("vnht"))
+    {
+        req.Headers.Referrer = new Uri("https://vinahentai.pics/");
+    }
+    else if (uri.Host.Contains("sayhentai") || uri.Host.Contains("pubtranxzyzz"))
+    {
+        req.Headers.Referrer = new Uri("https://sayhentai.cx/");
+    }
+    else if (uri.Host.Contains("hentaivn") || uri.Host.Contains("2tcdn"))
+    {
+        req.Headers.Referrer = new Uri("https://www.hentaivnx1.com/");
     }
     else
     {
