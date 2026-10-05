@@ -60,6 +60,50 @@ services:
     networks:
       - 210truyen-network
 
+  api:
+    build:
+      context: ./backend/TruyenDex.Api
+      dockerfile: Dockerfile
+    container_name: 210truyen-api
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: "5080"
+      ConnectionStrings__Database: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-truyendex};Username=${POSTGRES_USER:-truyendex};Password=${POSTGRES_PASSWORD:-0F868F3B16B7DECCAE75B6E6B85D2C1DB1A845FB1A810833}"
+      ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD:-7B8A91F2C3D4E5A6B7C8D9E0F1A2B3C4},abortConnect=false"
+      Meilisearch__Url: "http://meilisearch:7700"
+      Meilisearch__ApiKey: "${MEILI_MASTER_KEY:-truyendex_meili_master_key_8f93e5da4e928bfc}"
+      Jwt__Key: "${JWT_KEY:-0FD5CB907F85D4A39A8050488CEDB09B279939231E5A53BF9D636623E65EEA1A7EC97AE07988137FE4C52C0F5E54160A}"
+      Google__ClientId: "${GOOGLE_CLIENT_ID:-}"
+      Google__ClientSecret: "${GOOGLE_CLIENT_SECRET:-}"
+      Google__DriveFolderId: "${GOOGLE_DRIVE_FOLDER_ID:-}"
+      Google__RefreshToken: "${GOOGLE_DRIVE_REFRESH_TOKEN:-}"
+    ports:
+      - "${API_PORT:-5080}:5080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+    networks:
+      - 210truyen-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: 210truyen-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      api:
+        condition: service_started
+    networks:
+      - 210truyen-network
+
 volumes:
   postgres_data:
     driver: local
