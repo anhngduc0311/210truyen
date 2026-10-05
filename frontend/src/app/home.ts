@@ -65,10 +65,17 @@ import { Sidebar } from './sidebar';
   <section class="main-content-section">
     <div class="section-title">
       <div><span class="eyebrow">CHƯƠNG MỚI MỖI NGÀY</span><h2>Manga mới cập nhật <span class="update-dot"></span></h2></div>
-      <a class="filter-shortcut-btn" routerLink="/tim-truyen-nang-cao" aria-label="Lọc truyện nâng cao">
-        <app-icon name="filter"/>
-        <span class="btn-text">Bộ lọc</span>
-      </a>
+      <div class="section-header-actions">
+        <a class="view-all-manhwa-link" routerLink="/tim-truyen-nang-cao" [queryParams]="{country:'ja'}" aria-label="Xem tất cả Manga">
+          <span class="desktop-text">Xem tất cả</span>
+          <span class="mobile-text">Tất cả Manga</span>
+          <app-icon name="arrowRight"/>
+        </a>
+        <a class="filter-shortcut-btn" routerLink="/tim-truyen-nang-cao" aria-label="Lọc truyện nâng cao">
+          <app-icon name="filter"/>
+          <span class="btn-text">Bộ lọc</span>
+        </a>
+      </div>
     </div>
     
     <div class="list-meta-bar">
