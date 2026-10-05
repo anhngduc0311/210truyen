@@ -1168,6 +1168,9 @@ small {
     flex-wrap: wrap;
     gap: 6px;
     padding: 8px 10px 14px;
+    max-height: 280px;
+    overflow-y: auto;
+    scrollbar-width: thin;
 
     a {
       display: inline-block;
@@ -1373,8 +1376,21 @@ small {
 
 .genre-tags-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   gap: 8px;
+  max-height: 380px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 4px;
+  }
 
   a {
     padding: 8px 10px;
@@ -1385,11 +1401,15 @@ small {
     text-align: center;
     color: var(--text-secondary);
     transition: all 0.15s ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 
     &:hover {
       background: var(--accent-soft);
       border-color: var(--accent);
       color: var(--accent);
+      transform: translateY(-1px);
     }
   }
 }

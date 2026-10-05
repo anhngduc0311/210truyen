@@ -476,8 +476,13 @@ export class Detail {
   async findGenre(name: string) {
     try {
       const tags = await this.api.request<{ id: string; name: string }[]>('/catalog/tags');
-      const t = tags.find(x => x.name === name);
-      if (t) void this.router.navigate(['/tim-truyen-nang-cao'], { queryParams: { genre: t.id } });
+      const clean = name.trim().toLowerCase();
+      const t = tags.find(x => x.name.toLowerCase() === clean || x.id.toLowerCase() === clean);
+      if (t) {
+        void this.router.navigate(['/tim-truyen-nang-cao'], { queryParams: { genre: t.id } });
+      } else {
+        void this.router.navigate(['/tim-truyen-nang-cao'], { queryParams: { q: name } });
+      }
     } catch (e) {
       this.store.notify(message(e));
     }
