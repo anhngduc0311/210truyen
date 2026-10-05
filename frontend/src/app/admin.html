@@ -1,0 +1,1694 @@
+<div class="admin-shell">
+  <!-- TOPBAR -->
+  <header class="admin-topbar">
+    <div class="topbar-left">
+      <a routerLink="/" class="admin-brand">
+        <img src="/brand-mark.svg" width="32" height="32" alt="AkaTruyen" class="brand-logo">
+        <span class="brand-text">aka<span>truyen</span><span class="period">.</span></span>
+      </a>
+      <span class="admin-tag">ADMIN STUDIO</span>
+    </div>
+
+    <div class="topbar-right">
+      <a routerLink="/" target="_blank" class="topbar-link-btn" title="Mở trang chủ người dùng">
+        <app-icon name="compass"/> <span>Xem Website</span>
+      </a>
+      <button class="topbar-refresh-btn" (click)="switchTab(activeTab())" [class.spinning]="loading()" title="Làm mới dữ liệu">
+        <app-icon name="refresh"/>
+      </button>
+      <div class="admin-profile-pill">
+        <span class="admin-avatar">{{store.user()?.name?.slice(0, 1)?.toUpperCase() || 'A'}}</span>
+        <div class="admin-meta">
+          <span class="name">{{store.user()?.name}}</span>
+          <span class="role-badge">{{store.user()?.role}}</span>
+        </div>
+        <button class="btn-logout" (click)="store.logout(); router.navigate(['/'])" title="Đăng xuất">
+          <app-icon name="logout"/>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- BODY: SIDEBAR + CONTENT -->
+  <div class="admin-body">
+    <!-- SIDEBAR -->
+    <aside class="admin-sidebar">
+      <nav class="sidebar-nav">
+        <div class="nav-group-title">QUẢN TRỊ VIÊN</div>
+
+        <button class="nav-item" [class.active]="activeTab() === 'overview'" (click)="switchTab('overview')">
+          <app-icon name="dashboard"/>
+          <span>Tổng quan</span>
+        </button>
+
+        <button class="nav-item" [class.active]="activeTab() === 'mangas'" (click)="switchTab('mangas')">
+          <app-icon name="book"/>
+          <span>Quản lý truyện</span>
+          @if(overview()?.kpis?.totalMangas){
+            <span class="nav-count">{{overview()?.kpis?.totalMangas}}</span>
+          }
+        </button>
+
+        <button class="nav-item" [class.active]="activeTab() === 'chapters'" (click)="switchTab('chapters')">
+          <app-icon name="layers"/>
+          <span>Quản lý chương</span>
+          @if(overview()?.kpis?.totalChapters){
+            <span class="nav-count">{{overview()?.kpis?.totalChapters}}</span>
+          }
+        </button>
+
+        <button class="nav-item" [class.active]="activeTab() === 'taxonomy'" (click)="switchTab('taxonomy')">
+          <app-icon name="tag"/>
+          <span>Phân loại & Taxonomy</span>
+        </button>
+
+        <div class="nav-group-title">NGƯỜI DÙNG & KIỂM DUYỆT</div>
+
+        <button class="nav-item" [class.active]="activeTab() === 'users'" (click)="switchTab('users')">
+          <app-icon name="users"/>
+          <span>Thành viên & RBAC</span>
+          @if(overview()?.kpis?.totalUsers){
+            <span class="nav-count">{{overview()?.kpis?.totalUsers}}</span>
+          }
+        </button>
+
+        <button class="nav-item" [class.active]="activeTab() === 'moderation'" (click)="switchTab('moderation')">
+          <app-icon name="flag"/>
+          <span>Kiểm duyệt & Báo cáo</span>
+          @if(overview()?.recentReports?.length){
+            <span class="nav-badge alert">{{overview()?.recentReports?.length}}</span>
+          }
+        </button>
+
+        <button class="nav-item" [class.active]="activeTab() === 'logs'" (click)="switchTab('logs')">
+          <app-icon name="alertCircle"/>
+          <span>Nhật ký hệ thống</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="system-status">
+          <span class="status-dot online"></span>
+          <span>AkaTruyen Online</span>
+        </div>
+        <small class="version">v2.4.0 Studio Edition</small>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="admin-main">
+      <!-- ============================================================= -->
+      <!-- TAB 1: OVERVIEW -->
+      <!-- ============================================================= -->
+      @if(activeTab() === 'overview'){
+        <div class="tab-pane fade-in">
+          <div class="pane-header">
+            <div>
+              <h1 class="pane-title">Bảng điều khiển tổng quan</h1>
+              <p class="pane-subtitle">Số liệu thời gian thực và chỉ số hoạt động toàn hệ thống AkaTruyen</p>
+            </div>
+            <div class="pane-actions">
+              <button class="btn-primary" (click)="openCreateMangaModal()">
+                <app-icon name="plus"/> <span>Thêm truyện mới</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- KPI Cards Grid -->
+          <div class="kpi-grid">
+            <!-- KPI 1: Views -->
+            <div class="kpi-card glass-card">
+              <div class="kpi-header">
+                <span class="kpi-label">LƯỢT ĐỌC (VIEWS)</span>
+                <span class="kpi-icon-wrap views-icon"><app-icon name="fire"/></span>
+              </div>
+              <div class="kpi-value">{{compact(overview()?.kpis?.viewsToday || 0)}}</div>
+              <div class="kpi-meta">
+                <span class="kpi-sub"><strong class="highlight">{{compact(overview()?.kpis?.viewsWeek || 0)}}</strong> tuần này</span>
+                <span class="dot-sep">•</span>
+                <span class="kpi-sub"><strong>{{compact(overview()?.kpis?.viewsMonth || 0)}}</strong> tháng này</span>
+              </div>
+            </div>
+
+            <!-- KPI 2: Mangas & Chapters -->
+            <div class="kpi-card glass-card">
+              <div class="kpi-header">
+                <span class="kpi-label">TỔNG SỐ TRUYỆN</span>
+                <span class="kpi-icon-wrap manga-icon"><app-icon name="book"/></span>
+              </div>
+              <div class="kpi-value">{{overview()?.kpis?.totalMangas || 0}}</div>
+              <div class="kpi-meta">
+                <span class="kpi-sub"><strong class="highlight">+{{overview()?.kpis?.chaptersUpdatedToday || 0}}</strong> chương mới hôm nay</span>
+              </div>
+            </div>
+
+            <!-- KPI 3: Users -->
+            <div class="kpi-card glass-card">
+              <div class="kpi-header">
+                <span class="kpi-label">NGƯỜI DÙNG</span>
+                <span class="kpi-icon-wrap user-icon"><app-icon name="users"/></span>
+              </div>
+              <div class="kpi-value">{{overview()?.kpis?.totalUsers || 0}}</div>
+              <div class="kpi-meta">
+                <span class="kpi-sub"><strong class="highlight">+{{overview()?.kpis?.newUsersToday || 0}}</strong> đăng ký hôm nay</span>
+                <span class="dot-sep">•</span>
+                <span class="kpi-sub"><strong>+{{overview()?.kpis?.newUsersWeek || 0}}</strong> tuần này</span>
+              </div>
+            </div>
+
+            <!-- KPI 4: Coins & Revenue -->
+            <div class="kpi-card glass-card">
+              <div class="kpi-header">
+                <span class="kpi-label">DOANH THU & XU NẠP</span>
+                <span class="kpi-icon-wrap coins-icon"><app-icon name="coins"/></span>
+              </div>
+              <div class="kpi-value">{{compact(overview()?.kpis?.totalCoins || 0)}} <small class="unit">xu</small></div>
+              <div class="kpi-meta">
+                <span class="kpi-sub"><strong class="highlight">+{{compact(overview()?.kpis?.revenueToday || 0)}}</strong> nạp hôm nay</span>
+                <span class="dot-sep">•</span>
+                <span class="kpi-sub"><strong>{{compact(overview()?.kpis?.revenueMonth || 0)}}</strong> tháng</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Charts Row -->
+          <div class="charts-grid">
+            <!-- Chart 1: Views 7 Days -->
+            <div class="chart-card glass-card">
+              <div class="chart-header">
+                <div>
+                  <h2 class="chart-title">Biểu đồ lượt xem 7 ngày gần nhất</h2>
+                  <span class="chart-desc">Thống kê xu hướng đọc truyện theo từng ngày</span>
+                </div>
+                <span class="badge-pill cyan">Live Trends</span>
+              </div>
+              <div class="svg-chart-container">
+                <svg viewBox="0 0 600 200" preserveAspectRatio="none" class="chart-svg">
+                  <defs>
+                    <linearGradient id="viewsGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.45"/>
+                      <stop offset="100%" stop-color="#06b6d4" stop-opacity="0.0"/>
+                    </linearGradient>
+                  </defs>
+                  <!-- Background Area -->
+                  @if(getViewsChartArea()){
+                    <path [attr.d]="getViewsChartArea()" fill="url(#viewsGradient)"/>
+                    <path [attr.d]="getViewsChartPath()" fill="none" stroke="#06b6d4" stroke-width="3" stroke-linecap="round"/>
+                  }
+                </svg>
+                <!-- Day labels -->
+                <div class="chart-labels">
+                  @for(item of overview()?.chartViews; track item.date){
+                    <div class="chart-label-col">
+                      <span class="point-val">{{compact(item.views)}}</span>
+                      <span class="label-txt">{{item.date}}</span>
+                    </div>
+                  }
+                </div>
+              </div>
+            </div>
+
+            <!-- Chart 2: Coins Deposits -->
+            <div class="chart-card glass-card">
+              <div class="chart-header">
+                <div>
+                  <h2 class="chart-title">Biểu đồ nạp xu & giao dịch</h2>
+                  <span class="chart-desc">Số lượng xu người dùng nạp mở khóa chương</span>
+                </div>
+                <span class="badge-pill gold">Coins Revenue</span>
+              </div>
+              <div class="bar-chart-container">
+                @for(item of overview()?.chartCoins; track item.date){
+                  <div class="bar-col">
+                    <span class="bar-val">{{compact(item.coins)}}</span>
+                    <div class="bar-track">
+                      <div class="bar-fill" [style.height.%]="item.coins > 0 ? Math.min(100, (item.coins / 30000) * 100) : 8"></div>
+                    </div>
+                    <span class="bar-label">{{item.date}}</span>
+                  </div>
+                }
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Columns: Reports Alert + Top Manga + System Logs -->
+          <div class="dashboard-columns">
+            <!-- Left: Top Mangas of the Day -->
+            <div class="dash-box glass-card">
+              <div class="dash-box-header">
+                <h3 class="dash-box-title"><app-icon name="trophy"/> Top truyện đọc nhiều nhất hôm nay</h3>
+                <button class="btn-text" (click)="switchTab('mangas')">Xem tất cả</button>
+              </div>
+              <div class="dash-list">
+                @for(m of overview()?.topMangas; track m.id; let i = $index){
+                  <div class="dash-manga-item">
+                    <span class="rank-num" [class.top3]="i < 3">{{i + 1}}</span>
+                    <img [src]="m.cover" [alt]="m.title" class="manga-thumb" (error)="$any($event.target).src = '/cover-placeholder.svg'">
+                    <div class="manga-meta">
+                      <strong class="title" [title]="m.title">{{m.title}}</strong>
+                      <div class="sub-info">
+                        <span>{{m.author || 'Tác giả chưa rõ'}}</span>
+                        <span class="dot-sep">•</span>
+                        <span>{{m.chaptersCount}} chương</span>
+                      </div>
+                    </div>
+                    <div class="views-badge">
+                      <app-icon name="fire"/>
+                      <span>{{compact(m.views)}}</span>
+                    </div>
+                  </div>
+                }
+                @if(!overview()?.topMangas?.length){
+                  <div class="empty-state-sm">Chưa có dữ liệu truyện hôm nay.</div>
+                }
+              </div>
+            </div>
+
+            <!-- Middle: Quick Reports & Alerts -->
+            <div class="dash-box glass-card">
+              <div class="dash-box-header">
+                <h3 class="dash-box-title"><app-icon name="flag"/> Cảnh báo & Báo cáo vi phạm gần đây</h3>
+                <button class="btn-text" (click)="switchTab('moderation')">Kiểm duyệt</button>
+              </div>
+              <div class="dash-list">
+                @for(r of overview()?.recentReports; track r.id){
+                  <div class="report-alert-item" [class.pending]="r.status === 'pending'">
+                    <div class="report-badge-type" [class.broken]="r.type === 'broken_image'" [class.order]="r.type === 'wrong_order'">
+                      {{r.type === 'broken_image' ? 'ẢNH DIE' : r.type === 'wrong_order' ? 'LỘN XỘN' : r.type === 'translation_error' ? 'DỊCH SAI' : 'BÁO CÁO'}}
+                    </div>
+                    <div class="report-info">
+                      <strong class="report-reason">{{r.reason}}</strong>
+                      <div class="report-sub">
+                        <span>Bởi: {{r.userName}}</span>
+                        @if(r.mangaTitle){
+                          <span class="dot-sep">•</span>
+                          <span class="manga-ref">{{r.mangaTitle}}</span>
+                        }
+                        <span class="dot-sep">•</span>
+                        <span>{{ago(r.createdAt)}}</span>
+                      </div>
+                    </div>
+                  </div>
+                }
+                @if(!overview()?.recentReports?.length){
+                  <div class="empty-state-sm success-note">
+                    <app-icon name="check"/> Không có báo cáo vi phạm nào chưa xử lý!
+                  </div>
+                }
+              </div>
+            </div>
+
+            <!-- Right: System Logs Stream -->
+            <div class="dash-box glass-card">
+              <div class="dash-box-header">
+                <h3 class="dash-box-title"><app-icon name="alertCircle"/> Nhật ký log hệ thống</h3>
+                <button class="btn-text" (click)="switchTab('logs')">Xem chi tiết</button>
+              </div>
+              <div class="dash-list logs-stream">
+                @for(log of overview()?.recentLogs; track log.id){
+                  <div class="log-stream-item">
+                    <span class="log-level-pill" [class.info]="log.level === 'info'" [class.warning]="log.level === 'warning'" [class.error]="log.level === 'error'">
+                      {{log.level.toUpperCase()}}
+                    </span>
+                    <div class="log-content">
+                      <span class="log-msg">{{log.message}}</span>
+                      <time class="log-time">{{ago(log.createdAt)}}</time>
+                    </div>
+                  </div>
+                }
+                @if(!overview()?.recentLogs?.length){
+                  <div class="empty-state-sm">Hệ thống đang hoạt động ổn định.</div>
+                }
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+
+      <!-- ============================================================= -->
+      <!-- TAB 2: MANGA MANAGEMENT -->
+      <!-- ============================================================= -->
+      @if(activeTab() === 'mangas'){
+        <div class="tab-pane fade-in">
+          <div class="pane-header">
+            <div>
+              <h1 class="pane-title">Quản lý truyện tranh</h1>
+              <p class="pane-subtitle">Thêm mới, sửa đổi thông tin, điều chỉnh trạng thái và phân quyền nguồn truyện</p>
+            </div>
+            <div class="pane-actions">
+              <button class="btn-primary" (click)="openCreateMangaModal()">
+                <app-icon name="plus"/> <span>Thêm truyện mới</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Filters bar -->
+          <div class="filter-toolbar glass-card">
+            <div class="search-input-wrap">
+              <app-icon name="search"/>
+              <input
+                type="text"
+                placeholder="Tìm theo tên truyện, tác giả..."
+                [ngModel]="mangaQuery()"
+                (ngModelChange)="mangaQuery.set($event); mangaPage.set(1); loadMangas()"
+              >
+            </div>
+
+            <div class="filter-selects">
+              <select [ngModel]="mangaStatusFilter()" (ngModelChange)="mangaStatusFilter.set($event); mangaPage.set(1); loadMangas()">
+                <option value="all">Tất cả trạng thái</option>
+                <option value="ongoing">Đang tiến hành</option>
+                <option value="completed">Đã hoàn thành</option>
+                <option value="hiatus">Tạm ngưng</option>
+                <option value="cancelled">Đã hủy</option>
+              </select>
+
+              <select [ngModel]="mangaSourceFilter()" (ngModelChange)="mangaSourceFilter.set($event); mangaPage.set(1); loadMangas()">
+                <option value="all">Tất cả nguồn</option>
+                <option value="original">Tự sáng tác</option>
+                <option value="translation">Dịch thuật</option>
+                <option value="crawl">Re-up / Crawl</option>
+              </select>
+
+              <select [ngModel]="mangaVisibilityFilter()" (ngModelChange)="mangaVisibilityFilter.set($event); mangaPage.set(1); loadMangas()">
+                <option value="all">Tất cả hiển thị</option>
+                <option value="visible">Đang hiển thị</option>
+                <option value="hidden">Đang ẩn</option>
+                <option value="draft">Bản nháp</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Manga Table -->
+          <div class="data-table-container glass-card">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Truyện</th>
+                  <th>Nguồn</th>
+                  <th>Trạng thái</th>
+                  <th>Chương</th>
+                  <th>Lượt đọc</th>
+                  <th>Cập nhật</th>
+                  <th class="text-right">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for(m of mangas(); track m.id){
+                  <tr>
+                    <td class="manga-main-cell">
+                      <img [src]="m.cover" [alt]="m.title" class="table-cover" (error)="$any($event.target).src = '/cover-placeholder.svg'">
+                      <div class="cell-info">
+                        <strong class="cell-title">{{m.title}}</strong>
+                        <div class="cell-sub">
+                          <span>{{m.author || 'Tác giả chưa rõ'}}</span>
+                          @if(m.artist){
+                            <span class="dot-sep">•</span>
+                            <span>Họa sĩ: {{m.artist}}</span>
+                          }
+                        </div>
+                        @if(m.genres && m.genres.length){
+                          <div class="genre-tags-mini">
+                            @for(g of m.genres.slice(0, 3); track g){
+                              <span class="mini-tag">{{g}}</span>
+                            }
+                          </div>
+                        }
+                      </div>
+                    </td>
+                    <td>
+                      <span class="badge-source" [class.original]="m.sourceType === 'original'" [class.trans]="m.sourceType === 'translation'" [class.crawl]="m.sourceType === 'crawl'">
+                        {{m.sourceType === 'original' ? 'Sáng tác' : m.sourceType === 'translation' ? 'Dịch thuật' : 'Crawl/Reup'}}
+                      </span>
+                    </td>
+                    <td>
+                      <div class="status-cell">
+                        <span class="badge-status" [class.ongoing]="m.status === 'ongoing'" [class.completed]="m.status === 'completed'" [class.hiatus]="m.status === 'hiatus'">
+                          {{m.status === 'ongoing' ? 'Đang tiến hành' : m.status === 'completed' ? 'Hoàn thành' : 'Tạm ngưng'}}
+                        </span>
+                        @if(m.isHidden){
+                          <span class="badge-pill red">Đã ẩn</span>
+                        }
+                        @if(m.isDraft){
+                          <span class="badge-pill gray">Nháp</span>
+                        }
+                      </div>
+                    </td>
+                    <td>
+                      <button class="btn-table-chapters" (click)="manageMangaChapters(m)">
+                        <app-icon name="layers"/> <span>{{m.chaptersCount}} chương</span>
+                      </button>
+                    </td>
+                    <td>{{compact(m.views)}}</td>
+                    <td>{{ago(m.updatedAt)}}</td>
+                    <td class="text-right">
+                      <div class="action-buttons">
+                        <button class="icon-btn-action" (click)="manageMangaChapters(m)" title="Quản lý các chương">
+                          <app-icon name="layers"/>
+                        </button>
+                        <button class="icon-btn-action" (click)="openEditMangaModal(m)" title="Chỉnh sửa truyện">
+                          <app-icon name="edit"/>
+                        </button>
+                        <button class="icon-btn-action" (click)="toggleMangaVisibility(m)" [title]="m.isHidden ? 'Hiển thị truyện' : 'Ẩn truyện'">
+                          <app-icon [name]="m.isHidden ? 'eye' : 'eyeOff'"/>
+                        </button>
+                        <button class="icon-btn-action danger" (click)="deleteManga(m)" title="Xóa truyện">
+                          <app-icon name="trash"/>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                }
+                @if(!mangas().length && !loading()){
+                  <tr>
+                    <td colspan="7" class="text-center py-6">
+                      <div class="empty-table">Không tìm thấy truyện nào phù hợp với bộ lọc.</div>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination -->
+          @if(mangaTotal() > 15){
+            <div class="pagination-bar">
+              <div class="pagination-info">
+                Hiển thị <strong>{{(mangaPage() - 1) * 15 + 1}} – {{Math.min(mangaTotal(), mangaPage() * 15)}}</strong> / <strong>{{mangaTotal() | number}}</strong> truyện (Trang {{mangaPage()}} / {{getTotalPages(mangaTotal(), 15)}})
+              </div>
+
+              <div class="page-controls">
+                <button class="pag-btn" [disabled]="mangaPage() <= 1" (click)="mangaPage.set(1); loadMangas()" title="Trang đầu">
+                  <app-icon name="arrowLeft"/>
+                  <span class="btn-text-sm">Đầu</span>
+                </button>
+                <button class="pag-btn icon-only" [disabled]="mangaPage() <= 1" (click)="mangaPage.set(mangaPage() - 1); loadMangas()" title="Trang trước">
+                  <app-icon name="arrowLeft"/>
+                </button>
+
+                <div class="page-numbers-group">
+                  @for(p of getPageNumbers(mangaPage(), mangaTotal(), 15); track $index){
+                    @if(p === '...'){
+                      <span class="pag-dots">…</span>
+                    }@else{
+                      <button 
+                        class="pag-num-btn" 
+                        [class.active]="mangaPage() === p"
+                        (click)="mangaPage.set(+p); loadMangas()"
+                      >
+                        {{p}}
+                      </button>
+                    }
+                  }
+                </div>
+
+                <button class="pag-btn icon-only" [disabled]="mangaPage() >= getTotalPages(mangaTotal(), 15)" (click)="mangaPage.set(mangaPage() + 1); loadMangas()" title="Trang tiếp">
+                  <app-icon name="arrowRight"/>
+                </button>
+                <button class="pag-btn" [disabled]="mangaPage() >= getTotalPages(mangaTotal(), 15)" (click)="mangaPage.set(getTotalPages(mangaTotal(), 15)); loadMangas()" title="Trang cuối">
+                  <span class="btn-text-sm">Cuối</span>
+                  <app-icon name="arrowRight"/>
+                </button>
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- ============================================================= -->
+      <!-- TAB 3: CHAPTER MANAGEMENT -->
+      <!-- ============================================================= -->
+      @if(activeTab() === 'chapters'){
+        <div class="tab-pane fade-in">
+          <div class="pane-header">
+            <div>
+              <h1 class="pane-title">Quản lý chương (Chapters)</h1>
+              <p class="pane-subtitle">Soạn thảo văn bản rich text (truyện chữ) hoặc upload ảnh hàng loạt (truyện tranh), thiết lập mở khóa xu</p>
+            </div>
+            <div class="pane-actions">
+              <button class="btn-secondary" (click)="openDownloadChaptersModal()" [disabled]="!selectedMangaId() || !chapters().length" title="Tải xuống tệp chương theo khoảng (ZIP/ảnh) để đọc offline hoặc sao lưu">
+                <app-icon name="download"/> <span>Tải truyện theo chương</span>
+              </button>
+              <button class="btn-primary" (click)="openCreateChapterModal()" [disabled]="!selectedMangaId()">
+                <app-icon name="plus"/> <span>Thêm chương mới</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Manga Selector Banner -->
+          <div class="manga-selector-card glass-card">
+            @if(selectedManga()){
+              <div class="selected-manga-header">
+                <img [src]="selectedManga()?.cover" class="selected-cover" (error)="$any($event.target).src = '/cover-placeholder.svg'">
+                <div class="selected-info">
+                  <div class="badge-pill cyan">Đang chọn quản lý chương</div>
+                  <h2>{{selectedManga()?.title}}</h2>
+                  <div class="sub-meta">
+                    <span>Tác giả: {{selectedManga()?.author || 'Chưa cập nhật'}}</span>
+                    <span class="dot-sep">•</span>
+                    <span>{{chapters().length}} chương đã xuất bản</span>
+                  </div>
+                </div>
+                <button class="btn-secondary" (click)="selectedMangaId.set(''); selectedManga.set(null); switchTab('mangas')">
+                  Chọn truyện khác
+                </button>
+              </div>
+            }@else{
+              <div class="no-manga-selected">
+                <app-icon name="book"/>
+                <p>Vui lòng chọn một bộ truyện để quản lý danh sách chương.</p>
+                <button class="btn-primary" (click)="switchTab('mangas')">Danh sách truyện</button>
+              </div>
+            }
+          </div>
+
+          <!-- Chapter Filter Toolbar & Table -->
+          @if(selectedMangaId()){
+            <div class="filter-toolbar glass-card mt-4 mb-3">
+              <div class="search-input-wrap">
+                <app-icon name="search"/>
+                <input
+                  type="text"
+                  placeholder="Tìm tên hoặc số chương..."
+                  [ngModel]="chapterSearchQuery()"
+                  (ngModelChange)="chapterSearchQuery.set($event); chapterPage.set(1)"
+                >
+              </div>
+
+              <div class="filter-selects">
+                <select [ngModel]="chapterPageSize()" (ngModelChange)="chapterPageSize.set(+$event); chapterPage.set(1)">
+                  <option [value]="20">20 chương / trang</option>
+                  <option [value]="50">50 chương / trang</option>
+                  <option [value]="100">100 chương / trang</option>
+                  <option [value]="99999">Hiển thị tất cả</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="data-table-container glass-card">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Số tập</th>
+                    <th>Tên chương</th>
+                    <th>Loại nội dung</th>
+                    <th>Dung lượng</th>
+                    <th>Cài đặt phí / Hẹn giờ</th>
+                    <th>Ngày xuất bản</th>
+                    <th class="text-right">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for(c of getPagedChapters(); track c.id){
+                    <tr>
+                      <td><span class="chap-num-badge">#{{c.number}}</span></td>
+                      <td><strong class="chap-title">{{c.title}}</strong></td>
+                      <td>
+                        <span class="badge-pill" [class.purple]="c.contentType === 'novel'" [class.cyan]="c.contentType === 'comic'">
+                          {{c.contentType === 'novel' ? 'Truyện chữ' : 'Truyện tranh'}}
+                        </span>
+                      </td>
+                      <td>
+                        @if(c.contentType === 'novel'){
+                          <span>Rich Text</span>
+                        }@else{
+                          <span>{{c.pagesCount}} ảnh</span>
+                        }
+                      </td>
+                      <td>
+                        <div class="monetize-cell">
+                          @if(c.isLocked){
+                            <span class="badge-pill gold"><app-icon name="lock"/> {{c.coinPrice}} xu</span>
+                          }@else{
+                            <span class="badge-pill green">Miễn phí</span>
+                          }
+                          @if(c.scheduledPublishAt){
+                            <span class="badge-pill gray" title="Hẹn giờ xuất bản"><app-icon name="clock"/> Hẹn giờ</span>
+                          }
+                        </div>
+                      </td>
+                      <td>{{ago(c.publishedAt)}}</td>
+                      <td class="text-right">
+                        <div class="action-buttons">
+                          <button class="icon-btn-action" (click)="openDownloadChaptersModal(c)" title="Tải chương này về máy">
+                            <app-icon name="download"/>
+                          </button>
+                          <a [routerLink]="['/chuong', c.id]" target="_blank" class="icon-btn-action" title="Xem trên web">
+                            <app-icon name="compass"/>
+                          </a>
+                          <button class="icon-btn-action" (click)="openEditChapterModal(c)" title="Sửa chương">
+                            <app-icon name="edit"/>
+                          </button>
+                          <button class="icon-btn-action danger" (click)="deleteChapter(c)" title="Xóa chương">
+                            <app-icon name="trash"/>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  }
+                  @if(!getFilteredChaptersList().length && !loading()){
+                    <tr>
+                      <td colspan="7" class="text-center py-6">
+                        <div class="empty-table">
+                          {{chapterSearchQuery() ? 'Không tìm thấy chương nào phù hợp với từ khóa.' : 'Bộ truyện này chưa có chương nào. Nhấn "+ Thêm chương mới" để bắt đầu!'}}
+                        </div>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Chapter Pagination Bar -->
+            @if(getFilteredChaptersList().length > chapterPageSize()){
+              <div class="pagination-bar">
+                <div class="pagination-info">
+                  Hiển thị <strong>{{(chapterPage() - 1) * chapterPageSize() + 1}} – {{Math.min(getFilteredChaptersList().length, chapterPage() * chapterPageSize())}}</strong> / <strong>{{getFilteredChaptersList().length}}</strong> chương (Trang {{chapterPage()}} / {{getTotalPages(getFilteredChaptersList().length, chapterPageSize())}})
+                </div>
+
+                <div class="page-controls">
+                  <button class="pag-btn" [disabled]="chapterPage() <= 1" (click)="chapterPage.set(1)" title="Trang đầu">
+                    <app-icon name="arrowLeft"/>
+                    <span class="btn-text-sm">Đầu</span>
+                  </button>
+                  <button class="pag-btn icon-only" [disabled]="chapterPage() <= 1" (click)="chapterPage.set(chapterPage() - 1)" title="Trang trước">
+                    <app-icon name="arrowLeft"/>
+                  </button>
+
+                  <div class="page-numbers-group">
+                    @for(p of getPageNumbers(chapterPage(), getFilteredChaptersList().length, chapterPageSize()); track $index){
+                      @if(p === '...'){
+                        <span class="pag-dots">…</span>
+                      }@else{
+                        <button 
+                          class="pag-num-btn" 
+                          [class.active]="chapterPage() === p"
+                          (click)="chapterPage.set(+p)"
+                        >
+                          {{p}}
+                        </button>
+                      }
+                    }
+                  </div>
+
+                  <button class="pag-btn icon-only" [disabled]="chapterPage() >= getTotalPages(getFilteredChaptersList().length, chapterPageSize())" (click)="chapterPage.set(chapterPage() + 1)" title="Trang tiếp">
+                    <app-icon name="arrowRight"/>
+                  </button>
+                  <button class="pag-btn" [disabled]="chapterPage() >= getTotalPages(getFilteredChaptersList().length, chapterPageSize())" (click)="chapterPage.set(getTotalPages(getFilteredChaptersList().length, chapterPageSize()))" title="Trang cuối">
+                    <span class="btn-text-sm">Cuối</span>
+                    <app-icon name="arrowRight"/>
+                  </button>
+                </div>
+              </div>
+            }
+          }
+        </div>
+      }
+
+      <!-- ============================================================= -->
+      <!-- TAB 4: TAXONOMY MANAGEMENT -->
+      <!-- ============================================================= -->
+      @if(activeTab() === 'taxonomy'){
+        <div class="tab-pane fade-in">
+          <div class="pane-header">
+            <div>
+              <h1 class="pane-title">Quản lý Phân loại & Taxonomy</h1>
+              <p class="pane-subtitle">Hệ thống Thể loại, Tags, Tác giả và Nhóm dịch (Scanlation Teams)</p>
+            </div>
+            <div class="pane-actions">
+              <button class="btn-primary" (click)="openCreateTaxonomyModal()">
+                <app-icon name="plus"/> <span>Thêm mục mới</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Type Switcher Tabs -->
+          <div class="sub-tabs-bar">
+            <button class="sub-tab-btn" [class.active]="taxonomyType() === 'genre'" (click)="taxonomyType.set('genre'); loadTaxonomy()">
+              <app-icon name="tag"/> <span>Thể loại (Genres)</span>
+            </button>
+            <button class="sub-tab-btn" [class.active]="taxonomyType() === 'tag'" (click)="taxonomyType.set('tag'); loadTaxonomy()">
+              <app-icon name="bookmark"/> <span>Tags</span>
+            </button>
+            <button class="sub-tab-btn" [class.active]="taxonomyType() === 'author'" (click)="taxonomyType.set('author'); loadTaxonomy()">
+              <app-icon name="user"/> <span>Tác giả</span>
+            </button>
+            <button class="sub-tab-btn" [class.active]="taxonomyType() === 'group'" (click)="taxonomyType.set('group'); loadTaxonomy()">
+              <app-icon name="shield"/> <span>Nhóm dịch (Scanlation)</span>
+            </button>
+          </div>
+
+          <!-- Taxonomy Grid -->
+          <div class="taxonomy-grid mt-4">
+            @for(item of taxonomyItems(); track item.id){
+              <div class="taxonomy-card glass-card">
+                <div class="tax-card-top">
+                  <div>
+                    <h3 class="tax-name">{{item.name}}</h3>
+                    <code class="tax-slug">/{{item.slug}}</code>
+                  </div>
+                  <div class="action-buttons">
+                    <button class="icon-btn-action" (click)="openEditTaxonomyModal(item)" title="Sửa"><app-icon name="edit"/></button>
+                    <button class="icon-btn-action danger" (click)="deleteTaxonomy(item)" title="Xóa"><app-icon name="trash"/></button>
+                  </div>
+                </div>
+                <p class="tax-desc">{{item.description || 'Chưa có mô tả cho phân loại này.'}}</p>
+              </div>
+            }
+            @if(!taxonomyItems().length && !loading()){
+              <div class="empty-state-card glass-card">Chưa có mục nào trong danh mục này.</div>
+            }
+          </div>
+        </div>
+      }
+
+      <!-- ============================================================= -->
+      <!-- TAB 5: USERS & RBAC MANAGEMENT -->
+      <!-- ============================================================= -->
+      @if(activeTab() === 'users'){
+        <div class="tab-pane fade-in">
+          <div class="pane-header">
+            <div>
+              <h1 class="pane-title">Quản lý người dùng & Phân quyền (RBAC)</h1>
+              <p class="pane-subtitle">Quản lý thành viên, nạp/trừ xu, khóa tài khoản và phân quyền chức năng</p>
+            </div>
+          </div>
+
+          <!-- Filter Toolbar -->
+          <div class="filter-toolbar glass-card">
+            <div class="search-input-wrap">
+              <app-icon name="search"/>
+              <input
+                type="text"
+                placeholder="Tìm theo email, tên người dùng..."
+                [ngModel]="userQuery()"
+                (ngModelChange)="userQuery.set($event); userPage.set(1); loadUsers()"
+              >
+            </div>
+
+            <div class="filter-selects">
+              <select [ngModel]="userRoleFilter()" (ngModelChange)="userRoleFilter.set($event); userPage.set(1); loadUsers()">
+                <option value="all">Tất cả vai trò</option>
+                <option value="superadmin">Super Admin</option>
+                <option value="admin">Quản trị viên (Admin)</option>
+                <option value="editor">Biên tập viên (Editor)</option>
+                <option value="translator">Dịch giả (Translator)</option>
+                <option value="reader">Độc giả (Reader)</option>
+              </select>
+
+              <select [ngModel]="userStatusFilter()" (ngModelChange)="userStatusFilter.set($event); userPage.set(1); loadUsers()">
+                <option value="all">Tất cả trạng thái</option>
+                <option value="active">Đang hoạt động</option>
+                <option value="banned">Bị khóa tài khoản</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- User Table -->
+          <div class="data-table-container glass-card">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Thành viên</th>
+                  <th>Vai trò (RBAC)</th>
+                  <th>Số dư xu</th>
+                  <th>Trạng thái</th>
+                  <th>Ngày tham gia</th>
+                  <th class="text-right">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for(u of users(); track u.id){
+                  <tr>
+                    <td class="user-main-cell">
+                      <span class="user-avatar-small">{{u.name.slice(0, 1).toUpperCase() || 'U'}}</span>
+                      <div class="user-info">
+                        <strong>{{u.name}}</strong>
+                        <small class="muted">{{u.email}}</small>
+                      </div>
+                    </td>
+                    <td>
+                      @if(isFullAdmin()){
+                        <select [ngModel]="u.role" (ngModelChange)="updateUserRole(u, $event)" class="role-select">
+                          <option value="superadmin">Super Admin</option>
+                          <option value="admin">Admin</option>
+                          <option value="editor">Editor</option>
+                          <option value="translator">Translator</option>
+                          <option value="reader">Reader</option>
+                        </select>
+                      }@else{
+                        <span class="badge-pill cyan">{{u.role}}</span>
+                      }
+                    </td>
+                    <td>
+                      <span class="coins-badge"><app-icon name="coins"/> {{u.coins | number}} xu</span>
+                    </td>
+                    <td>
+                      <span class="badge-status" [class.banned]="u.isBanned" [class.active]="!u.isBanned">
+                        {{u.isBanned ? 'Đã khóa' : 'Hoạt động'}}
+                      </span>
+                    </td>
+                    <td>{{ago(u.createdAt)}}</td>
+                    <td class="text-right">
+                      <div class="action-buttons">
+                        <button class="icon-btn-action" (click)="openUserCoinModal(u)" title="Nạp / Trừ xu">
+                          <app-icon name="coins"/>
+                        </button>
+                        @if(isFullAdmin()){
+                          <button class="icon-btn-action" [class.danger]="!u.isBanned" (click)="toggleUserStatus(u)" [title]="u.isBanned ? 'Mở khóa tài khoản' : 'Khóa tài khoản'">
+                            <app-icon [name]="u.isBanned ? 'unlock' : 'lock'"/>
+                          </button>
+                        }
+                      </div>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <!-- User Pagination -->
+          @if(userTotal() > 20){
+            <div class="pagination-bar">
+              <div class="pagination-info">
+                Hiển thị <strong>{{(userPage() - 1) * 20 + 1}} – {{Math.min(userTotal(), userPage() * 20)}}</strong> / <strong>{{userTotal() | number}}</strong> thành viên (Trang {{userPage()}} / {{getTotalPages(userTotal(), 20)}})
+              </div>
+
+              <div class="page-controls">
+                <button class="pag-btn" [disabled]="userPage() <= 1" (click)="userPage.set(1); loadUsers()" title="Trang đầu">
+                  <app-icon name="arrowLeft"/>
+                  <span class="btn-text-sm">Đầu</span>
+                </button>
+                <button class="pag-btn icon-only" [disabled]="userPage() <= 1" (click)="userPage.set(userPage() - 1); loadUsers()" title="Trang trước">
+                  <app-icon name="arrowLeft"/>
+                </button>
+
+                <div class="page-numbers-group">
+                  @for(p of getPageNumbers(userPage(), userTotal(), 20); track $index){
+                    @if(p === '...'){
+                      <span class="pag-dots">…</span>
+                    }@else{
+                      <button 
+                        class="pag-num-btn" 
+                        [class.active]="userPage() === p"
+                        (click)="userPage.set(+p); loadUsers()"
+                      >
+                        {{p}}
+                      </button>
+                    }
+                  }
+                </div>
+
+                <button class="pag-btn icon-only" [disabled]="userPage() >= getTotalPages(userTotal(), 20)" (click)="userPage.set(userPage() + 1); loadUsers()" title="Trang tiếp">
+                  <app-icon name="arrowRight"/>
+                </button>
+                <button class="pag-btn" [disabled]="userPage() >= getTotalPages(userTotal(), 20)" (click)="userPage.set(getTotalPages(userTotal(), 20)); loadUsers()" title="Trang cuối">
+                  <span class="btn-text-sm">Cuối</span>
+                  <app-icon name="arrowRight"/>
+                </button>
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- ============================================================= -->
+      <!-- TAB 6: MODERATION & REPORTS -->
+      <!-- ============================================================= -->
+      @if(activeTab() === 'moderation'){
+        <div class="tab-pane fade-in">
+          <div class="pane-header">
+            <div>
+              <h1 class="pane-title">Quản lý tương tác & Kiểm duyệt</h1>
+              <p class="pane-subtitle">Xử lý báo cáo lỗi từ độc giả, kiểm duyệt bình luận, và cài đặt danh sách từ cấm tự động</p>
+            </div>
+          </div>
+
+          <!-- Moderation Sub Tabs -->
+          <div class="sub-tabs-bar">
+            <button class="sub-tab-btn" [class.active]="moderationTab() === 'reports'" (click)="moderationTab.set('reports'); loadReports()">
+              <app-icon name="flag"/> <span>Báo cáo sự cố (Reports)</span>
+            </button>
+            <button class="sub-tab-btn" [class.active]="moderationTab() === 'comments'" (click)="moderationTab.set('comments'); loadComments()">
+              <app-icon name="comment"/> <span>Quản lý bình luận</span>
+            </button>
+            <button class="sub-tab-btn" [class.active]="moderationTab() === 'keywords'" (click)="moderationTab.set('keywords'); loadKeywords()">
+              <app-icon name="shield"/> <span>Từ khóa cấm (Blacklist)</span>
+            </button>
+          </div>
+
+          <!-- SUB-TAB A: REPORTS -->
+          @if(moderationTab() === 'reports'){
+            <div class="mt-4">
+              <div class="filter-toolbar glass-card mb-4">
+                <div class="filter-selects">
+                  <select [ngModel]="reportStatusFilter()" (ngModelChange)="reportStatusFilter.set($event); loadReports()">
+                    <option value="all">Tất cả trạng thái</option>
+                    <option value="pending">Đang chờ xử lý</option>
+                    <option value="resolved">Đã khắc phục</option>
+                    <option value="dismissed">Bỏ qua</option>
+                  </select>
+
+                  <select [ngModel]="reportTypeFilter()" (ngModelChange)="reportTypeFilter.set($event); loadReports()">
+                    <option value="all">Tất cả loại lỗi</option>
+                    <option value="broken_image">Ảnh die / Lỗi tải ảnh</option>
+                    <option value="wrong_order">Chương lộn xộn</option>
+                    <option value="translation_error">Dịch sai / Trùng lặp</option>
+                    <option value="comment_spam">Bình luận spam</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="data-table-container glass-card">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Loại sự cố</th>
+                      <th>Lý do & Mô tả</th>
+                      <th>Truyện / Chương</th>
+                      <th>Người báo cáo</th>
+                      <th>Trạng thái</th>
+                      <th>Thời gian</th>
+                      <th class="text-right">Xử lý</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for(r of reports(); track r.id){
+                      <tr>
+                        <td>
+                          <span class="badge-pill" [class.red]="r.type === 'broken_image'" [class.amber]="r.type === 'wrong_order'">
+                            {{r.type === 'broken_image' ? 'Ảnh hỏng' : r.type === 'wrong_order' ? 'Chương lộn' : r.type === 'translation_error' ? 'Dịch sai' : 'Khác'}}
+                          </span>
+                        </td>
+                        <td>
+                          <div class="report-reason-text">
+                            <strong>{{r.reason}}</strong>
+                            @if(r.notes){
+                              <small class="admin-notes-preview">Ghi chú: {{r.notes}}</small>
+                            }
+                          </div>
+                        </td>
+                        <td>
+                          <div>
+                            <strong>{{r.mangaTitle || 'Chung'}}</strong>
+                            @if(r.chapterTitle){
+                              <div class="muted small">{{r.chapterTitle}}</div>
+                            }
+                          </div>
+                        </td>
+                        <td>{{r.userName}}</td>
+                        <td>
+                          <span class="badge-status" [class.ongoing]="r.status === 'pending'" [class.completed]="r.status === 'resolved'" [class.hiatus]="r.status === 'dismissed'">
+                            {{r.status === 'pending' ? 'Chờ duyệt' : r.status === 'resolved' ? 'Đã xong' : 'Bỏ qua'}}
+                          </span>
+                        </td>
+                        <td>{{ago(r.createdAt)}}</td>
+                        <td class="text-right">
+                          <button class="btn-sm btn-primary" (click)="openResolveReportModal(r)">Xử lý</button>
+                        </td>
+                      </tr>
+                    }
+                    @if(!reports().length && !loading()){
+                      <tr><td colspan="7" class="text-center py-6">Không có báo cáo nào trong danh mục này.</td></tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          }
+
+          <!-- SUB-TAB B: COMMENTS -->
+          @if(moderationTab() === 'comments'){
+            <div class="mt-4">
+              <div class="filter-toolbar glass-card mb-4">
+                <div class="search-input-wrap">
+                  <app-icon name="search"/>
+                  <input
+                    type="text"
+                    placeholder="Tìm theo nội dung bình luận..."
+                    [ngModel]="commentQuery()"
+                    (ngModelChange)="commentQuery.set($event); loadComments()"
+                  >
+                </div>
+                <label class="flag-filter-label">
+                  <input type="checkbox" [ngModel]="commentFlaggedOnly()" (ngModelChange)="commentFlaggedOnly.set($event); loadComments()">
+                  <span>Chỉ hiện bình luận bị gắn cờ / vi phạm từ ngữ</span>
+                </label>
+              </div>
+
+              <div class="data-table-container glass-card">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Người bình luận</th>
+                      <th>Truyện</th>
+                      <th>Nội dung</th>
+                      <th>Cảnh báo</th>
+                      <th>Thời gian</th>
+                      <th class="text-right">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for(c of comments(); track c.id){
+                      <tr>
+                        <td>
+                          <strong>{{c.userName}}</strong>
+                          <div class="muted small">{{c.userEmail}}</div>
+                        </td>
+                        <td><strong>{{c.mangaTitle}}</strong></td>
+                        <td class="comment-body-cell">
+                          <p class="comment-txt">{{c.body}}</p>
+                        </td>
+                        <td>
+                          @if(c.isFlagged){
+                            <span class="badge-pill red"><app-icon name="flag"/> Bị gắn cờ</span>
+                          }@else{
+                            <span class="badge-pill green">Hợp lệ</span>
+                          }
+                        </td>
+                        <td>{{ago(c.createdAt)}}</td>
+                        <td class="text-right">
+                          <div class="action-buttons">
+                            <button class="icon-btn-action" [class.alert]="c.isFlagged" (click)="toggleFlagComment(c)" [title]="c.isFlagged ? 'Bỏ gắn cờ' : 'Gắn cờ vi phạm'">
+                              <app-icon name="flag"/>
+                            </button>
+                            <button class="icon-btn-action danger" (click)="deleteComment(c)" title="Xóa spam">
+                              <app-icon name="trash"/>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Comment Pagination -->
+              @if(commentTotal() > 20){
+                <div class="pagination-bar">
+                  <div class="pagination-info">
+                    Hiển thị <strong>{{(commentPage() - 1) * 20 + 1}} – {{Math.min(commentTotal(), commentPage() * 20)}}</strong> / <strong>{{commentTotal() | number}}</strong> bình luận
+                  </div>
+
+                  <div class="page-controls">
+                    <button class="pag-btn icon-only" [disabled]="commentPage() <= 1" (click)="commentPage.set(commentPage() - 1); loadComments()" title="Trang trước">
+                      <app-icon name="arrowLeft"/>
+                    </button>
+                    <div class="page-numbers-group">
+                      @for(p of getPageNumbers(commentPage(), commentTotal(), 20); track $index){
+                        @if(p === '...'){
+                          <span class="pag-dots">…</span>
+                        }@else{
+                          <button class="pag-num-btn" [class.active]="commentPage() === p" (click)="commentPage.set(+p); loadComments()">{{p}}</button>
+                        }
+                      }
+                    </div>
+                    <button class="pag-btn icon-only" [disabled]="commentPage() >= getTotalPages(commentTotal(), 20)" (click)="commentPage.set(commentPage() + 1); loadComments()" title="Trang tiếp">
+                      <app-icon name="arrowRight"/>
+                    </button>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+
+          <!-- SUB-TAB C: BANNED KEYWORDS -->
+          @if(moderationTab() === 'keywords'){
+            <div class="mt-4">
+              <div class="keyword-add-bar glass-card mb-4">
+                <div class="search-input-wrap">
+                  <input
+                    type="text"
+                    placeholder="Nhập từ hoặc cụm từ cần cấm..."
+                    [ngModel]="newKeyword()"
+                    (ngModelChange)="newKeyword.set($event)"
+                    (keydown.enter)="addKeyword()"
+                  >
+                </div>
+                <button class="btn-primary" (click)="addKeyword()" [disabled]="!newKeyword().trim()">
+                  <app-icon name="plus"/> <span>Thêm vào danh sách cấm</span>
+                </button>
+              </div>
+
+              <div class="keywords-list glass-card">
+                <div class="keywords-wrap">
+                  @for(kw of keywords(); track kw.id){
+                    <div class="keyword-chip">
+                      <span>{{kw.keyword}}</span>
+                      <button (click)="deleteKeyword(kw.id)" title="Xóa"><app-icon name="close"/></button>
+                    </div>
+                  }
+                  @if(!keywords().length){
+                    <div class="empty-state-sm">Chưa có từ khóa nào trong danh sách cấm.</div>
+                  }
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- ============================================================= -->
+      <!-- TAB 7: LOGS -->
+      <!-- ============================================================= -->
+      @if(activeTab() === 'logs'){
+        <div class="tab-pane fade-in">
+          <div class="pane-header">
+            <div>
+              <h1 class="pane-title">Nhật ký hệ thống (System Logs)</h1>
+              <p class="pane-subtitle">Theo dõi lỗi crawl ảnh, lỗi storage, phân quyền và các hoạt động quản trị</p>
+            </div>
+            <button class="btn-secondary" (click)="loadLogs()"><app-icon name="refresh"/> <span>Làm mới</span></button>
+          </div>
+
+          <div class="data-table-container glass-card mt-4">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Cấp độ</th>
+                  <th>Phân hệ</th>
+                  <th>Thông điệp / Chi tiết log</th>
+                  <th>Thời gian</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for(l of logs(); track l.id){
+                  <tr>
+                    <td>
+                      <span class="log-level-pill" [class.info]="l.level === 'info'" [class.warning]="l.level === 'warning'" [class.error]="l.level === 'error'">
+                        {{l.level.toUpperCase()}}
+                      </span>
+                    </td>
+                    <td><code>{{l.source}}</code></td>
+                    <td><strong>{{l.message}}</strong></td>
+                    <td>{{ago(l.createdAt)}}</td>
+                  </tr>
+                }
+                @if(!logs().length && !loading()){
+                  <tr><td colspan="4" class="text-center py-6">Không có dữ liệu log.</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Logs Pagination -->
+          @if(logTotal() > 20){
+            <div class="pagination-bar">
+              <div class="pagination-info">
+                Hiển thị <strong>{{(logPage() - 1) * 20 + 1}} – {{Math.min(logTotal(), logPage() * 20)}}</strong> / <strong>{{logTotal() | number}}</strong> nhật ký
+              </div>
+              <div class="page-controls">
+                <button class="pag-btn icon-only" [disabled]="logPage() <= 1" (click)="logPage.set(logPage() - 1); loadLogs()" title="Trang trước">
+                  <app-icon name="arrowLeft"/>
+                </button>
+                <div class="page-numbers-group">
+                  @for(p of getPageNumbers(logPage(), logTotal(), 20); track $index){
+                    @if(p === '...'){
+                      <span class="pag-dots">…</span>
+                    }@else{
+                      <button class="pag-num-btn" [class.active]="logPage() === p" (click)="logPage.set(+p); loadLogs()">{{p}}</button>
+                    }
+                  }
+                </div>
+                <button class="pag-btn icon-only" [disabled]="logPage() >= getTotalPages(logTotal(), 20)" (click)="logPage.set(logPage() + 1); loadLogs()" title="Trang tiếp">
+                  <app-icon name="arrowRight"/>
+                </button>
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </main>
+  </div>
+
+  <!-- ================================================================= -->
+  <!-- MODAL: ADD / EDIT MANGA -->
+  <!-- ================================================================= -->
+  @if(mangaModalOpen()){
+    <div class="modal-backdrop" (click)="mangaModalOpen.set(false)">
+      <div class="admin-modal glass-card" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>{{mangaEditMode() ? 'Chỉnh sửa thông tin truyện' : 'Thêm truyện tranh mới'}}</h3>
+          <button class="icon-btn-close" (click)="mangaModalOpen.set(false)"><app-icon name="close"/></button>
+        </div>
+
+        <form class="modal-body" (ngSubmit)="saveManga()">
+          <div class="form-row-2">
+            <div class="form-group">
+              <label>Tên truyện <span class="req">*</span></label>
+              <input type="text" [(ngModel)]="currentManga.title" name="mangaTitle" required placeholder="Nhập tên chính...">
+            </div>
+            <div class="form-group">
+              <label>Tên khác (Alternative Title)</label>
+              <input type="text" [(ngModel)]="currentManga.alternativeTitle" name="mangaAlt" placeholder="Tên tiếng Anh/Hàn/Nhật...">
+            </div>
+          </div>
+
+          <div class="form-row-3">
+            <div class="form-group">
+              <label>Tác giả</label>
+              <input type="text" [(ngModel)]="currentManga.author" name="mangaAuthor" placeholder="Tên tác giả...">
+            </div>
+            <div class="form-group">
+              <label>Họa sĩ</label>
+              <input type="text" [(ngModel)]="currentManga.artist" name="mangaArtist" placeholder="Tên họa sĩ...">
+            </div>
+            <div class="form-group">
+              <label>Năm phát hành</label>
+              <input type="number" [(ngModel)]="currentManga.year" name="mangaYear">
+            </div>
+          </div>
+
+          <div class="form-row-3">
+            <div class="form-group">
+              <label>Nguồn truyện</label>
+              <select [(ngModel)]="currentManga.sourceType" name="mangaSource">
+                <option value="original">Truyện tự sáng tác</option>
+                <option value="translation">Truyện dịch thuật</option>
+                <option value="crawl">Re-up / Crawl</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Trạng thái</label>
+              <select [(ngModel)]="currentManga.status" name="mangaStatus">
+                <option value="ongoing">Đang tiến hành</option>
+                <option value="completed">Đã hoàn thành</option>
+                <option value="hiatus">Tạm ngưng</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Quốc gia</label>
+              <select [(ngModel)]="currentManga.country" name="mangaCountry">
+                <option value="vn">Việt Nam (VN)</option>
+                <option value="kr">Hàn Quốc (Manhwa)</option>
+                <option value="cn">Trung Quốc (Manhua)</option>
+                <option value="jp">Nhật Bản (Manga)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Ảnh bìa (Cover URL)</label>
+            <div class="cover-input-preview-row">
+              <input type="text" [(ngModel)]="currentManga.cover" name="mangaCover" placeholder="https://... hoặc /uploads/...">
+              @if(currentManga.cover){
+                <img [src]="currentManga.cover" class="modal-cover-preview" (error)="$any($event.target).src = '/cover-placeholder.svg'">
+              }
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Thể loại (phân cách bằng dấu phẩy)</label>
+            <input type="text" [(ngModel)]="currentManga.genresInput" name="mangaGenres" placeholder="Action, Romance, Isekai, Manhwa...">
+          </div>
+
+          <div class="form-group">
+            <label>Mô tả / Tóm tắt nội dung</label>
+            <textarea [(ngModel)]="currentManga.description" name="mangaDesc" rows="4" placeholder="Nội dung tóm tắt..."></textarea>
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label>Nhóm dịch (Scanlation)</label>
+              <input type="text" [(ngModel)]="currentManga.scanlationGroup" name="mangaGroup" placeholder="Tên nhóm dịch...">
+            </div>
+            <div class="form-group">
+              <label>Tags bổ sung</label>
+              <input type="text" [(ngModel)]="currentManga.tagsInput" name="mangaTags" placeholder="harem, he, ngot...">
+            </div>
+          </div>
+
+          <div class="form-checkbox-group">
+            <label class="cb-item">
+              <input type="checkbox" [(ngModel)]="currentManga.featured" name="mangaFeat">
+              <span>Đưa lên mục Nổi bật (Featured)</span>
+            </label>
+            <label class="cb-item">
+              <input type="checkbox" [(ngModel)]="currentManga.isDraft" name="mangaDraft">
+              <span>Lưu dưới dạng Bản nháp (Draft)</span>
+            </label>
+            <label class="cb-item">
+              <input type="checkbox" [(ngModel)]="currentManga.isHidden" name="mangaHidden">
+              <span>Ẩn truyện khỏi trang chủ</span>
+            </label>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary" (click)="mangaModalOpen.set(false)">Hủy</button>
+            <button type="submit" class="btn-primary" [disabled]="actionLoading()">
+              <span>{{mangaEditMode() ? 'Cập nhật truyện' : 'Thêm truyện mới'}}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+
+  <!-- ================================================================= -->
+  <!-- MODAL: ADD / EDIT CHAPTER (DUAL MODE: COMIC VS NOVEL) -->
+  <!-- ================================================================= -->
+  @if(chapterModalOpen()){
+    <div class="modal-backdrop" (click)="chapterModalOpen.set(false)">
+      <div class="admin-modal wide glass-card" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <h3>{{chapterEditMode() ? 'Chỉnh sửa chương' : 'Thêm chương mới'}}</h3>
+            <span class="sub-manga-title">Bộ truyện: <strong>{{selectedManga()?.title}}</strong></span>
+          </div>
+          <button class="icon-btn-close" (click)="chapterModalOpen.set(false)"><app-icon name="close"/></button>
+        </div>
+
+        <form class="modal-body" (ngSubmit)="saveChapter()">
+          <div class="form-row-3">
+            <div class="form-group">
+              <label>Số tập / Chương <span class="req">*</span></label>
+              <input type="number" step="0.1" [(ngModel)]="currentChapter.number" name="chapNum" required>
+            </div>
+            <div class="form-group">
+              <label>Tên chương</label>
+              <input type="text" [(ngModel)]="currentChapter.title" name="chapTitle" placeholder="VD: Chương 1: Bắt đầu...">
+            </div>
+            <div class="form-group">
+              <label>Định dạng nội dung</label>
+              <select [(ngModel)]="currentChapter.contentType" name="chapType">
+                <option value="comic">Truyện tranh (Upload ảnh / Manga)</option>
+                <option value="novel">Truyện chữ (Soạn thảo văn bản)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- COMIC MODE: Bulk Image URLs + Local Upload -->
+          @if(currentChapter.contentType === 'comic'){
+            <div class="content-editor-box">
+              <div class="editor-header">
+                <label>Nội dung ảnh chương ({{currentChapter.pagesList?.length || 0}} ảnh)</label>
+                <div class="upload-actions">
+                  <label class="btn-file-upload">
+                    <input type="file" multiple accept="image/*" (change)="onFileUpload($event)" style="display:none">
+                    <app-icon name="image"/> <span>Tải lên file ảnh từ máy</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="bulk-urls-input-wrap">
+                <textarea
+                  [(ngModel)]="currentChapter.pagesText"
+                  name="chapPagesText"
+                  rows="4"
+                  (input)="onPagesTextInput()"
+                  placeholder="Dán hàng loạt link ảnh vào đây (mỗi dòng một URL ảnh)..."
+                ></textarea>
+              </div>
+
+              <!-- Thumbnails preview & reorder -->
+              @if(currentChapter.pagesList && currentChapter.pagesList.length){
+                <div class="chapter-pages-grid">
+                  @for(pageUrl of currentChapter.pagesList; track pageUrl; let idx = $index){
+                    <div class="page-thumb-card">
+                      <span class="page-idx">#{{idx + 1}}</span>
+                      <img [src]="pageUrl" class="thumb-img" (error)="$any($event.target).src = '/cover-placeholder.svg'">
+                      <button type="button" class="btn-del-page" (click)="removeChapterPage(idx)"><app-icon name="trash"/></button>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          }
+
+          <!-- NOVEL MODE: Rich Text Editor -->
+          @if(currentChapter.contentType === 'novel'){
+            <div class="content-editor-box">
+              <div class="editor-header">
+                <label>Trình soạn thảo văn bản Truyện Chữ</label>
+              </div>
+              <textarea
+                class="novel-textarea"
+                [(ngModel)]="currentChapter.content"
+                name="chapNovelContent"
+                rows="12"
+                placeholder="Nhập hoặc dán nội dung truyện chữ tại đây..."
+              ></textarea>
+            </div>
+          }
+
+          <!-- Monetization & Schedule Publish Section -->
+          <div class="settings-grid-2 mt-4">
+            <div class="settings-box">
+              <h4 class="settings-heading"><app-icon name="coins"/> Cài đặt tính phí & Khóa xu</h4>
+              <label class="cb-item mb-2">
+                <input type="checkbox" [(ngModel)]="currentChapter.isLocked" name="chapIsLocked">
+                <span>Khóa chương bằng Xu</span>
+              </label>
+
+              @if(currentChapter.isLocked){
+                <div class="form-row-2">
+                  <div class="form-group">
+                    <label>Giá mở khóa (Xu)</label>
+                    <input type="number" [(ngModel)]="currentChapter.coinPrice" name="chapCoinPrice" placeholder="50, 100...">
+                  </div>
+                  <div class="form-group">
+                    <label>Khóa tạm thời (Tự động mở Free vào ngày)</label>
+                    <input type="datetime-local" [(ngModel)]="currentChapter.unlockAt" name="chapUnlockAt">
+                  </div>
+                </div>
+              }
+            </div>
+
+            <div class="settings-box">
+              <h4 class="settings-heading"><app-icon name="clock"/> Hẹn giờ xuất bản (Schedule Publish)</h4>
+              <div class="form-group">
+                <label>Thời điểm công khai chương</label>
+                <input type="datetime-local" [(ngModel)]="currentChapter.scheduledPublishAt" name="chapSchedPublish">
+                <small class="muted">Để trống nếu muốn công khai ngay lập tức.</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary" (click)="chapterModalOpen.set(false)">Hủy</button>
+            <button type="submit" class="btn-primary" [disabled]="actionLoading() || uploadingImages()">
+              <span>{{chapterEditMode() ? 'Lưu thay đổi' : 'Xuất bản chương'}}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+
+  <!-- ================================================================= -->
+  <!-- MODAL: ADD / EDIT TAXONOMY -->
+  <!-- ================================================================= -->
+  @if(taxonomyModalOpen()){
+    <div class="modal-backdrop" (click)="taxonomyModalOpen.set(false)">
+      <div class="admin-modal glass-card" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>{{taxonomyEditMode() ? 'Sửa mục Taxonomy' : 'Thêm mới Taxonomy'}}</h3>
+          <button class="icon-btn-close" (click)="taxonomyModalOpen.set(false)"><app-icon name="close"/></button>
+        </div>
+        <form class="modal-body" (ngSubmit)="saveTaxonomy()">
+          <div class="form-group">
+            <label>Tên mục <span class="req">*</span></label>
+            <input type="text" [(ngModel)]="currentTaxonomy.name" name="taxName" required placeholder="VD: Action, Romance...">
+          </div>
+          <div class="form-group">
+            <label>Đường dẫn Slug (Tùy chọn)</label>
+            <input type="text" [(ngModel)]="currentTaxonomy.slug" name="taxSlug" placeholder="action, romance...">
+          </div>
+          <div class="form-group">
+            <label>Mô tả</label>
+            <textarea [(ngModel)]="currentTaxonomy.description" name="taxDesc" rows="3"></textarea>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary" (click)="taxonomyModalOpen.set(false)">Hủy</button>
+            <button type="submit" class="btn-primary" [disabled]="actionLoading()">Lưu</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+
+  <!-- ================================================================= -->
+  <!-- MODAL: ADJUST USER COINS -->
+  <!-- ================================================================= -->
+  @if(userCoinModalOpen()){
+    <div class="modal-backdrop" (click)="userCoinModalOpen.set(false)">
+      <div class="admin-modal glass-card" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>Điều chỉnh số dư Xu: {{selectedUserForCoins()?.name}}</h3>
+          <button class="icon-btn-close" (click)="userCoinModalOpen.set(false)"><app-icon name="close"/></button>
+        </div>
+        <form class="modal-body" (ngSubmit)="submitCoinAdjust()">
+          <p class="muted">Số dư hiện tại: <strong>{{selectedUserForCoins()?.coins | number}} xu</strong></p>
+          <div class="form-group">
+            <label>Số xu cộng (+) hoặc trừ (-)</label>
+            <input type="number" [(ngModel)]="coinAdjustAmount" name="coinAmt" required>
+          </div>
+          <div class="form-group">
+            <label>Lý do / Ghi chú giao dịch</label>
+            <input type="text" [(ngModel)]="coinAdjustNote" name="coinNote" required>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary" (click)="userCoinModalOpen.set(false)">Hủy</button>
+            <button type="submit" class="btn-primary" [disabled]="actionLoading()">Xác nhận điều chỉnh</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+
+  <!-- ================================================================= -->
+  <!-- MODAL: DOWNLOAD CHAPTERS (TẢI TRUYỆN THEO CHƯƠNG) -->
+  <!-- ================================================================= -->
+  @if(downloadModalOpen()){
+    <div class="modal-backdrop" (click)="!isDownloading() && downloadModalOpen.set(false)">
+      <div class="admin-modal download-modal glass-card" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div class="header-with-icon">
+            <app-icon name="download"/>
+            <div>
+              <h3>Tải truyện theo chương (Offline / Backup)</h3>
+              <p class="sub-text">Xuất ảnh và nội dung truyện thành tệp ZIP nén để lưu trữ hoặc đọc offline</p>
+            </div>
+          </div>
+          <button class="icon-btn-close" [disabled]="isDownloading()" (click)="downloadModalOpen.set(false)"><app-icon name="close"/></button>
+        </div>
+
+        <div class="modal-body download-body">
+          <!-- Manga Info Strip -->
+          <div class="download-manga-summary">
+            <img [src]="selectedManga()?.cover" class="summary-cover" (error)="$any($event.target).src = '/cover-placeholder.svg'">
+            <div class="summary-meta">
+              <h4>{{selectedManga()?.title}}</h4>
+              <span>{{chapters().length}} chương khả dụng • Tác giả: {{selectedManga()?.author || 'Chưa rõ'}}</span>
+            </div>
+          </div>
+
+          <!-- Mode Selector -->
+          <div class="download-mode-tabs">
+            <button type="button" class="mode-tab-btn" [class.active]="downloadRangeMode() === 'range'" (click)="downloadRangeMode.set('range')" [disabled]="isDownloading()">
+              <app-icon name="layers"/> <span>Theo khoảng chương</span>
+            </button>
+            <button type="button" class="mode-tab-btn" [class.active]="downloadRangeMode() === 'custom'" (click)="downloadRangeMode.set('custom')" [disabled]="isDownloading()">
+              <app-icon name="filter"/> <span>Chọn từng chương</span>
+            </button>
+          </div>
+
+          <!-- Range Mode Settings -->
+          @if(downloadRangeMode() === 'range'){
+            <div class="range-config-card">
+              <div class="range-inputs-row">
+                <div class="range-field">
+                  <label>Từ chương:</label>
+                  <input type="number" [(ngModel)]="downloadFromChap" [min]="1" [disabled]="isDownloading()">
+                </div>
+                <div class="range-sep">➔</div>
+                <div class="range-field">
+                  <label>Đến chương:</label>
+                  <input type="number" [(ngModel)]="downloadToChap" [min]="1" [disabled]="isDownloading()">
+                </div>
+              </div>
+
+              <!-- Quick Presets -->
+              <div class="quick-presets">
+                <span class="preset-label">Chọn nhanh:</span>
+                <button type="button" class="preset-pill" (click)="setDownloadPreset('all')" [disabled]="isDownloading()">Toàn bộ chương ({{chapters().length}})</button>
+                <button type="button" class="preset-pill" (click)="setDownloadPreset('first10')" [disabled]="isDownloading()">10 chương đầu</button>
+                <button type="button" class="preset-pill" (click)="setDownloadPreset('last10')" [disabled]="isDownloading()">10 chương mới nhất</button>
+              </div>
+
+              <div class="range-summary-note">
+                Sẽ tải <strong class="text-accent">{{getSelectedDownloadCount()}} chương</strong> từ #{{Math.min(downloadFromChap(), downloadToChap())}} đến #{{Math.max(downloadFromChap(), downloadToChap())}}.
+              </div>
+            </div>
+          }
+
+          <!-- Custom Selection Mode -->
+          @if(downloadRangeMode() === 'custom'){
+            <div class="custom-chap-select-card">
+              <div class="custom-select-toolbar">
+                <div class="chap-search-box">
+                  <app-icon name="search"/>
+                  <input type="text" [(ngModel)]="downloadChapSearch" placeholder="Tìm tên hoặc số chương..." [disabled]="isDownloading()">
+                </div>
+                <div class="select-actions">
+                  <button type="button" class="btn-text-action" (click)="toggleSelectAllChapters(true)" [disabled]="isDownloading()">Chọn tất cả</button>
+                  <button type="button" class="btn-text-action" (click)="toggleSelectAllChapters(false)" [disabled]="isDownloading()">Bỏ chọn</button>
+                </div>
+              </div>
+
+              <div class="custom-chap-list">
+                @for(c of getFilteredDownloadChapters(); track c.id){
+                  <label class="chap-check-item" [class.selected]="isChapterSelected(c.id)">
+                    <input type="checkbox" [checked]="isChapterSelected(c.id)" (change)="toggleSelectChapter(c.id)" [disabled]="isDownloading()">
+                    <span class="chap-check-num">#{{c.number}}</span>
+                    <span class="chap-check-title">{{c.title}}</span>
+                    <span class="chap-check-pages">{{c.contentType === 'novel' ? 'Truyện chữ' : c.pagesCount + ' ảnh'}}</span>
+                  </label>
+                }
+                @if(!getFilteredDownloadChapters().length){
+                  <div class="empty-chap-search">Không tìm thấy chương nào phù hợp.</div>
+                }
+              </div>
+
+              <div class="custom-selection-count">
+                Đã chọn: <strong class="text-accent">{{downloadSelectedChapIds().length}} / {{chapters().length}} chương</strong>
+              </div>
+            </div>
+          }
+
+          <!-- Options Row -->
+          <div class="download-options-grid">
+            <div class="opt-col">
+              <label class="opt-label">Định dạng đóng gói:</label>
+              <select [(ngModel)]="downloadFormat" [disabled]="isDownloading()">
+                <option value="single_zip">1 Tệp ZIP gom toàn bộ chương</option>
+              </select>
+            </div>
+            <div class="opt-col">
+              <label class="opt-label">Chất lượng tải ảnh:</label>
+              <select [(ngModel)]="downloadQuality" [disabled]="isDownloading()">
+                <option value="original">Chất lượng gốc (Original HD)</option>
+                <option value="saver">Tiết kiệm băng thông (Data Saver)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Progress Section -->
+          @if(isDownloading() || downloadProgress() > 0){
+            <div class="download-progress-card">
+              <div class="progress-top-meta">
+                <span class="progress-status-txt">{{downloadStatus()}}</span>
+                <span class="progress-percent-val">{{downloadProgress()}}%</span>
+              </div>
+              <div class="progress-bar-track">
+                <div class="progress-bar-fill" [style.width.%]="downloadProgress()"></div>
+              </div>
+
+              <!-- Console Logs -->
+              @if(downloadLogs().length){
+                <div class="download-logs-box">
+                  @for(log of downloadLogs(); track log){
+                    <div class="log-line">{{log}}</div>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="modal-footer">
+          @if(isDownloading()){
+            <button type="button" class="btn-danger" (click)="cancelDownload()">
+              <app-icon name="close"/> <span>Hủy tiến trình</span>
+            </button>
+          }@else{
+            <button type="button" class="btn-secondary" (click)="downloadModalOpen.set(false)">Đóng</button>
+            <button type="button" class="btn-primary btn-start-download" (click)="startDownloadChapters()" [disabled]="getSelectedDownloadCount() === 0">
+              <app-icon name="download"/> <span>Bắt đầu tải ({{getSelectedDownloadCount()}} chương)</span>
+            </button>
+          }
+        </div>
+      </div>
+    </div>
+  }
+</div>
