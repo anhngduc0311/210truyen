@@ -25,6 +25,9 @@ export class App {
   tags = signal<{ id: string; name: string }[]>([]);
   draft: Settings = { ...this.store.settings() };
   reader = signal(false);
+  hideBottomNav = signal(false);
+  private lastScrollY = 0;
+  private readonly scrollDeltaThreshold = 8;
 
   // Search suggestions state
   suggestions = signal<Manga[]>([]);
@@ -47,6 +50,8 @@ export class App {
         this.genresOpen.set(false);
         this.suggestionsOpen.set(false);
         this.mobileSearchOpen.set(false);
+        this.hideBottomNav.set(false);
+        this.lastScrollY = 0;
         this.reader.set(e.urlAfterRedirects.includes('/chuong/'));
 
         const hasSavedHomeScroll = typeof window !== 'undefined' && (sessionStorage.getItem('home_scroll_y') || sessionStorage.getItem('home_manga_id'));
@@ -198,6 +203,35 @@ export class App {
       } catch {
         this.store.notify('Không tải được thể loại. Vui lòng thử lại.');
       }
+    }
+  }
+
+  @HostListener('window:scroll')
+  onScroll() {
+    if (typeof window === 'undefined' || this.reader()) return;
+    const currentScrollY = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
+
+    // Always show dock near the top of the page
+    if (currentScrollY <= 45) {
+      this.hideBottomNav.set(false);
+      this.lastScrollY = currentScrollY;
+      return;
+    }
+
+    const diff = currentScrollY - this.lastScrollY;
+    if (Math.abs(diff) >= this.scrollDeltaThreshold) {
+      if (diff > 0 && currentScrollY > 70) {
+        // Scrolling DOWN -> Hide bottom dock
+        if (!this.hideBottomNav()) {
+          this.hideBottomNav.set(true);
+        }
+      } else if (diff < 0) {
+        // Scrolling UP -> Show bottom dock
+        if (this.hideBottomNav()) {
+          this.hideBottomNav.set(false);
+        }
+      }
+      this.lastScrollY = currentScrollY;
     }
   }
 

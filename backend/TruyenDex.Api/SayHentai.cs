@@ -570,6 +570,12 @@ public class SayHentai(HttpClient http, IMemoryCache cache, IConnectionMultiplex
         var html = await FetchHtml(url);
         if (string.IsNullOrEmpty(html)) return [];
 
+        // If SayHentai has no search results, it displays the "Mới Cập Nhật" fallback section
+        if (Regex.IsMatch(html, @"<h2 class=""h4"">\s*<i class=""icon ion-md-star""></i>\s*Mới Cập Nhật", RegexOptions.IgnoreCase))
+        {
+            return [];
+        }
+
         return ParseCards(html);
     }
 

@@ -373,8 +373,10 @@ public class VinaHentai(HttpClient http, IMemoryCache cache, IConnectionMultiple
                 decimal.TryParse(numMatch.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out num);
             }
 
-            var chapId = CreateGuid("vinahentai:chap:" + slug + "/" + chapSlug);
+            var chapId = CreateGuid("vinahentai:chap:" + slug + ":" + chapSlug);
+            var altChapId = CreateGuid("vinahentai:chap:" + slug + "/" + chapSlug);
             RegisterChapter(chapId, chapHref, id);
+            RegisterChapter(altChapId, chapHref, id);
 
             chapters.Add(new ChapterCard(chapId, id, chapTitle, num, "vi", publishedAt, !string.IsNullOrEmpty(translator) ? translator : "VinaHentai"));
         }
@@ -432,14 +434,28 @@ public class VinaHentai(HttpClient http, IMemoryCache cache, IConnectionMultiple
         if (string.IsNullOrEmpty(html)) return null;
 
         // Extract image URLs
-        var imgMatches = Regex.Matches(html, @"https://vnht\.vinahentai\.pics/manga-images/[a-zA-Z0-9_\-\.]+\.(?:webp|jpg|jpeg|png)", RegexOptions.IgnoreCase);
+        var normalizedHtml = html.Replace(@"\/", "/");
+        var imgMatches = Regex.Matches(normalizedHtml, @"https://vnht\.vinahentai\.pics/manga-images/[a-zA-Z0-9_\-\.\/]+?\.(?:webp|jpg|jpeg|png)", RegexOptions.IgnoreCase);
         var pages = new List<string>();
         foreach (Match im in imgMatches)
         {
-            var u = im.Value;
+            var u = im.Value.TrimEnd('\\').Trim();
             if (!pages.Contains(u))
             {
                 pages.Add(u);
+            }
+        }
+
+        if (pages.Count == 0)
+        {
+            var allImgs = Regex.Matches(normalizedHtml, @"<img\s+[^>]*src=""([^"">]+)""[^>]*>", RegexOptions.IgnoreCase);
+            foreach (Match im in allImgs)
+            {
+                var u = im.Groups[1].Value.TrimEnd('\\').Trim();
+                if ((u.Contains("vinahentai") || u.Contains("vnht")) && (u.EndsWith(".webp") || u.EndsWith(".jpg") || u.EndsWith(".png") || u.EndsWith(".jpeg")) && !u.Contains("logo") && !u.Contains("icon") && !u.Contains("avatar") && !u.Contains("banner"))
+                {
+                    if (!pages.Contains(u)) pages.Add(u);
+                }
             }
         }
 
@@ -548,6 +564,128 @@ public class VinaHentai(HttpClient http, IMemoryCache cache, IConnectionMultiple
                 Chapters = [],
                 TotalChapters = totalChaps,
                 Genres = genres
+            };
+
+            items.Add(card);
+
+            if (meili != null)
+            {
+                _ = Task.Run(async () => {
+                    try {
+                        var index = meili.Index("mangas");
+                        await index.AddDocumentsAsync(new[] { card });
+                    } catch { }
+                });
+            }
+        }
+
+        // If search results are empty, try author slug page
+        if (items.Count == 0 && page == 1)
+        {
+            try
+            {
+                var authorItems = await GetByAuthor(query, page);
+                if (authorItems.Count > 0) return authorItems;
+            }
+            catch { }
+        }
+
+        return items;
+    }
+
+    public async Task<List<MangaCard>> GetByAuthor(string author, int page = 1)
+    {
+        if (string.IsNullOrWhiteSpace(author)) return [];
+        var cleanSlug = Regex.Replace(author.Trim().ToLowerInvariant(), @"[^a-z0-9\-]+", "-").Trim('-');
+        var url = $"{BaseUrl}/authors/{cleanSlug}?page={page}";
+        var html = await FetchHtml(url);
+        if (string.IsNullOrEmpty(html) || html.Contains("404") || html.Contains("Không tìm thấy trang")) return [];
+
+        var items = new List<MangaCard>();
+        var cardRegex = new Regex(@"<a\s+[^>]*href=""/truyen-hentai/([^""/]+)""[^>]*>([\s\S]*?)</a>", RegexOptions.IgnoreCase);
+        var matches = cardRegex.Matches(html);
+
+        foreach (Match m in matches)
+        {
+            var slug = m.Groups[1].Value.Trim();
+            if (string.IsNullOrEmpty(slug)) continue;
+
+            var cardContent = m.Groups[2].Value;
+
+            // Cover
+            var imgMatch = Regex.Match(cardContent, @"<img[^>]+src=""([^"">]+)""[^>]*alt=""([^"">]*)""", RegexOptions.IgnoreCase);
+            if (!imgMatch.Success)
+            {
+                imgMatch = Regex.Match(cardContent, @"<img[^>]+alt=""([^"">]*)""[^>]*src=""([^"">]+)""", RegexOptions.IgnoreCase);
+            }
+            var coverUrl = imgMatch.Success ? (imgMatch.Groups[1].Value.StartsWith("http") ? imgMatch.Groups[1].Value : imgMatch.Groups[2].Value) : "";
+            var imgAlt = imgMatch.Success ? (imgMatch.Groups[2].Value.StartsWith("http") ? imgMatch.Groups[1].Value : imgMatch.Groups[2].Value) : "";
+
+            // Title
+            var titleMatch = Regex.Match(cardContent, @"title=""([^""]+)""\s*>\s*([^<]+)\s*</div>\s*</div>\s*</div>", RegexOptions.IgnoreCase);
+            if (!titleMatch.Success)
+            {
+                titleMatch = Regex.Match(cardContent, @"<div class=""mt-1\.5[^""]*"" title=""([^""]+)""", RegexOptions.IgnoreCase);
+            }
+            var title = titleMatch.Success ? StripHtml(titleMatch.Groups[1].Value) : StripHtml(imgAlt);
+            if (string.IsNullOrWhiteSpace(title)) title = slug;
+
+            // Chapter
+            var chapMatch = Regex.Match(cardContent, @"title=""(Chap[^""]*|Chương[^""]*|Ch\.[^""]*|Một Bắn[^""]*)""", RegexOptions.IgnoreCase);
+            if (!chapMatch.Success)
+            {
+                chapMatch = Regex.Match(cardContent, @"<span[^>]*class=""[^""]*text-white/90[^""]*""[^>]*title=""([^""]+)""", RegexOptions.IgnoreCase);
+            }
+            var latestChapterTitle = chapMatch.Success ? StripHtml(chapMatch.Groups[1].Value) : "";
+
+            // Updated time
+            var timeMatch = Regex.Match(cardContent, @"title=""([^""]+)""[^>]*>\s*[^<]*trc\s*</span>", RegexOptions.IgnoreCase);
+            var updatedAt = timeMatch.Success ? ParseTimeAgo(timeMatch.Groups[1].Value) : DateTime.UtcNow;
+
+            var mangaId = CreateGuid("vinahentai:manga:" + slug);
+            RegisterManga(mangaId, slug);
+
+            // Parse chapter number
+            decimal chapNum = 0;
+            if (!string.IsNullOrEmpty(latestChapterTitle))
+            {
+                var numMatch = Regex.Match(latestChapterTitle, @"(?:\b|[^\w\d])(?:chương|chapter|chap|ch|c)?[\s\._-]*(\d+(?:\.\d+)?)", RegexOptions.IgnoreCase);
+                if (numMatch.Success)
+                {
+                    decimal.TryParse(numMatch.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out chapNum);
+                }
+            }
+
+            var chapters = new List<ChapterCard>();
+            if (!string.IsNullOrEmpty(latestChapterTitle))
+            {
+                var chapSlug = chapNum > 0 ? $"chap-{chapNum}" : "chap-1";
+                var chapId = CreateGuid("vinahentai:chap:" + slug + ":" + chapSlug);
+                var chapHref = $"/truyen-hentai/{slug}/{chapSlug}";
+                RegisterChapter(chapId, chapHref, mangaId);
+                chapters.Add(new ChapterCard(chapId, mangaId, latestChapterTitle, chapNum, "vi", updatedAt, "VinaHentai"));
+            }
+
+            var card = new MangaCard
+            {
+                Id = mangaId,
+                Slug = slug,
+                Title = title,
+                AlternativeTitle = title,
+                Author = author.Trim(),
+                Cover = !string.IsNullOrEmpty(coverUrl) ? coverUrl : "/cover-placeholder.svg",
+                Description = "",
+                Status = "ongoing",
+                Country = "ja",
+                Demographic = "VinaHentai",
+                ContentRating = "erotica",
+                Year = updatedAt.Year,
+                Rating = 9.0,
+                Follows = 100,
+                UpdatedAt = updatedAt,
+                Chapters = chapters,
+                TotalChapters = (int)Math.Max(1, Math.Round(chapNum)),
+                Genres = ["Hentai", "Manga"]
             };
 
             items.Add(card);

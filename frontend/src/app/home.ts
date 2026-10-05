@@ -71,10 +71,6 @@ import { Sidebar } from './sidebar';
           <span class="mobile-text">Tất cả Manga</span>
           <app-icon name="arrowRight"/>
         </a>
-        <a class="filter-shortcut-btn" routerLink="/tim-truyen-nang-cao" aria-label="Lọc truyện nâng cao">
-          <app-icon name="filter"/>
-          <span class="btn-text">Bộ lọc</span>
-        </a>
       </div>
     </div>
     

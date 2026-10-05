@@ -76,7 +76,18 @@ import { Sidebar } from './sidebar';
 
             <dl class="meta-grid">
               <dt>Tác giả</dt>
-              <dd>{{m.author || 'Đang cập nhật'}}</dd>
+              <dd class="author-dd">
+                @if(getAuthors(m.author).length > 0){
+                  @for(author of getAuthors(m.author); track author; let last = $last){
+                    <button type="button" class="author-link-btn" (click)="findAuthor(author)" [title]="'Xem truyện của tác giả ' + author">
+                      <app-icon name="user" class="author-icon"/>
+                      <span>{{author}}</span>
+                    </button>@if(!last){<span class="author-sep">, </span>}
+                  }
+                }@else{
+                  <span>{{m.author || 'Đang cập nhật'}}</span>
+                }
+              </dd>
               <dt>Tình trạng</dt>
               <dd>
                 <span class="status-indicator" [class.ongoing]="m.status === 'ongoing'" [class.completed]="m.status === 'completed'">
@@ -471,6 +482,24 @@ export class Detail {
     } finally {
       this.reading.set(false);
     }
+  }
+
+  getAuthors(authorStr?: string): string[] {
+    if (!authorStr) return [];
+    const lower = authorStr.trim().toLowerCase();
+    if (lower === 'đang cập nhật' || lower === 'vinahentai' || lower === 'hentaivn' || lower === 'sayhentai' || lower === 'unknown') {
+      return [];
+    }
+    return authorStr
+      .split(/[,;\/]+/)
+      .map(a => a.trim())
+      .filter(a => a.length > 0 && a.toLowerCase() !== 'đang cập nhật' && a.toLowerCase() !== 'vinahentai' && a.toLowerCase() !== 'hentaivn' && a.toLowerCase() !== 'sayhentai');
+  }
+
+  findAuthor(author: string) {
+    if (!author || !author.trim()) return;
+    const clean = author.trim();
+    void this.router.navigate(['/tim-truyen-nang-cao'], { queryParams: { q: clean } });
   }
 
   async findGenre(name: string) {

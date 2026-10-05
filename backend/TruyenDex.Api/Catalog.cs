@@ -251,18 +251,22 @@ public class Catalog(IMemoryCache cache, VinaHentai vinahentai, SayHentai sayhen
         var qNorm = NormalizeTitle(q);
         if (string.IsNullOrEmpty(qNorm)) return 10;
 
+        var aNorm = NormalizeTitle(m.Author);
+        if (!string.IsNullOrEmpty(aNorm) && aNorm == qNorm) return 0;
+
         var tNorm = NormalizeTitle(m.Title);
         var altNorm = NormalizeTitle(m.AlternativeTitle);
 
         if (tNorm == qNorm) return 0;
         if (altNorm == qNorm) return 1;
+        if (!string.IsNullOrEmpty(aNorm) && (aNorm.Contains(qNorm) || qNorm.Contains(aNorm))) return 1;
         if (tNorm.StartsWith(qNorm) || qNorm.StartsWith(tNorm)) return 2;
         if (altNorm.StartsWith(qNorm) || qNorm.StartsWith(altNorm)) return 3;
         if (tNorm.Contains(qNorm)) return 4;
         if (altNorm.Contains(qNorm)) return 5;
 
         var words = q.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (words.Length > 1 && words.All(w => (m.Title + " " + m.AlternativeTitle).Contains(w, StringComparison.OrdinalIgnoreCase)))
+        if (words.Length > 1 && words.All(w => (m.Title + " " + m.AlternativeTitle + " " + m.Author).Contains(w, StringComparison.OrdinalIgnoreCase)))
             return 6;
 
         return 10;
@@ -324,12 +328,12 @@ public class Catalog(IMemoryCache cache, VinaHentai vinahentai, SayHentai sayhen
                 if (!items.Any(existing => IsSameManga(existing.Title, existing.AlternativeTitle, s.Title, s.AlternativeTitle)))
                     items.Add(s);
             }
-            total = Math.Max(1200, items.Count);
+            total = !string.IsNullOrWhiteSpace(q) ? (items.Count >= size ? page * size + size : (page - 1) * size + items.Count) : Math.Max(1200, items.Count);
         }
         else if (isJapan || !string.IsNullOrWhiteSpace(genre))
         {
             foreach (var v in vinaResults) items.Add(v);
-            total = vinaResults.Count > 0 ? Math.Max(2400, page * 24 + 48) : items.Count;
+            total = !string.IsNullOrWhiteSpace(q) ? (items.Count >= size ? page * size + size : (page - 1) * size + items.Count) : (vinaResults.Count > 0 ? Math.Max(2400, page * 24 + 48) : items.Count);
         }
         else
         {
@@ -344,7 +348,7 @@ public class Catalog(IMemoryCache cache, VinaHentai vinahentai, SayHentai sayhen
                 if (!items.Any(existing => IsSameManga(existing.Title, existing.AlternativeTitle, s.Title, s.AlternativeTitle)))
                     items.Add(s);
             }
-            total = Math.Max(39680, items.Count);
+            total = !string.IsNullOrWhiteSpace(q) ? (items.Count >= size ? page * size + size : (page - 1) * size + items.Count) : Math.Max(39680, items.Count);
         }
 
         // Fallback: If external sources returned 0 items and meili is available, search local meili index
@@ -492,7 +496,7 @@ public class Catalog(IMemoryCache cache, VinaHentai vinahentai, SayHentai sayhen
 
     public async Task<ReaderData> Read(Guid id)
     {
-        var cacheKey = $"catalog:reader:v9:{id}";
+        var cacheKey = $"catalog:reader:v10:{id}";
         var cachedReader = await CacheGet<ReaderData>(cacheKey);
         if (cachedReader != null) return cachedReader;
 

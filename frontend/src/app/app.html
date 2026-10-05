@@ -404,7 +404,7 @@
   </footer>
 
   <!-- MOBILE BOTTOM DOCK / TAB BAR -->
-  <nav class="mobile-bottom-dock glass-panel" aria-label="Điều hướng nhanh trên điện thoại">
+  <nav class="mobile-bottom-dock glass-panel" [class.dock-hidden]="hideBottomNav()" aria-label="Điều hướng nhanh trên điện thoại">
     <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact:true}" class="dock-item">
       <app-icon name="home"/>
       <span>Trang chủ</span>
