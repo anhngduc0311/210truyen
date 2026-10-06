@@ -51,11 +51,34 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 # ==============================================================================
-# 2. Kiểm tra và cài đặt Git, Docker, Docker Compose plugin nếu chưa có
+# 2. Cấu hình Swap 4GB (tối ưu bộ nhớ ảo cho VPS)
+# ==============================================================================
+log_info "Kiem tra cau hinh Swap memory..."
+if [ ! -f /swapfile ] && [ "$(grep -c '/swapfile' /proc/swaps 2>/dev/null || echo 0)" -eq 0 ]; then
+    log_info "Chua co swapfile. Dang tien hanh tao 4GB Swap..."
+    $SUDO fallocate -l 4G /swapfile 2>/dev/null || $SUDO dd if=/dev/zero of=/swapfile bs=1M count=4096 status=none
+    $SUDO chmod 600 /swapfile
+    $SUDO mkswap /swapfile
+    $SUDO swapon /swapfile
+    if ! grep -q '/swapfile' /etc/fstab; then
+        echo '/swapfile none swap sw 0 0' | $SUDO tee -a /etc/fstab > /dev/null
+    fi
+    log_success "Khoi tao 4GB Swap thanh cong!"
+elif [ -f /swapfile ] && [ "$(grep -c '/swapfile' /proc/swaps 2>/dev/null || echo 0)" -eq 0 ]; then
+    log_info "File /swapfile da ton tai nhung chua duoc bat. Dang bat swap..."
+    $SUDO chmod 600 /swapfile
+    $SUDO swapon /swapfile || true
+    log_success "Kich hoat Swap thanh cong!"
+else
+    log_info "Swap da duoc kich hoat tren he thong."
+fi
+
+# ==============================================================================
+# 3. Kiểm tra và cài đặt Git, Docker, Docker Compose plugin nếu chưa có
 # ==============================================================================
 log_info "Kiem tra cac cong cu can thiet (Git, Docker, Docker Compose)..."
 
-# 2.1. Kiem tra Git
+# 3.1. Kiem tra Git
 if ! command -v git >/dev/null 2>&1; then
     log_warning "Git chua duoc cai dat. Dang tien hanh cai dat Git..."
     $SUDO apt-get update -y
@@ -65,7 +88,7 @@ else
     log_info "Git da co san: $(git --version)"
 fi
 
-# 2.2. Kiem tra Docker & Docker Compose Plugin
+# 3.2. Kiem tra Docker & Docker Compose Plugin
 if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
     log_warning "Docker hoac Docker Compose plugin chua duoc cai dat. Dang tien hanh cai dat..."
     
@@ -108,7 +131,7 @@ if ! docker info >/dev/null 2>&1; then
 fi
 
 # ==============================================================================
-# 3. Kéo code mới nhất từ Git repo (git pull origin main)
+# 4. Kéo code mới nhất từ Git repo (git pull origin main)
 # ==============================================================================
 BRANCH="${1:-main}"
 
@@ -129,21 +152,21 @@ if [ ! -f ".env" ] && [ -f ".env.example" ]; then
 fi
 
 # ==============================================================================
-# 4. Rebuild và khởi chạy container chạy ngầm (docker compose up -d --build)
+# 5. Rebuild và khởi chạy container chạy ngầm (docker compose up -d --build)
 # ==============================================================================
 log_info "Dang rebuild va khoi chay cac container (docker compose up -d --build)..."
 docker compose up -d --build --remove-orphans
 log_success "Khoi chay cac container thanh cong!"
 
 # ==============================================================================
-# 5. Dọn dẹp images/containers rác cũ (docker system prune -f)
+# 6. Dọn dẹp images/containers rác cũ (docker system prune -f)
 # ==============================================================================
 log_info "Dang don dep cac dangling images va container rac cu..."
 docker system prune -f
 log_success "Don dep he thong hoan tat!"
 
 # ==============================================================================
-# 6. In log trạng thái container
+# 7. In log trạng thái container
 # ==============================================================================
 echo ""
 log_info "Trang thai hoat dong cua cac container:"
