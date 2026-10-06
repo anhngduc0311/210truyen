@@ -35,8 +35,8 @@ public record ChapterPage(List<ChapterCard> Items, int Total, int Page, int Page
 public record ReaderData(ChapterCard Chapter, MangaCard Manga, string[] Pages, string[] DataSaverPages, string? ExternalUrl, List<ChapterCard> Navigation);
 public class UpstreamException(string message, int status = 502) : Exception(message) { public int Status { get; } = status; }
 
-// Aggregator for VinaHentai (Manga/Hentai), HentaiVN (Manhwa), and SayHentai.
-public class Catalog(IMemoryCache cache, VinaHentai vinahentai, SayHentai sayhentai, HentaiVn hentaivn, IConnectionMultiplexer? redis = null, MeilisearchClient? meili = null)
+// Aggregator for VinaHentai (Manga/Hentai), MimiHentai (Manga/Hentai), HentaiVN (Manhwa), and SayHentai.
+public class Catalog(IMemoryCache cache, VinaHentai vinahentai, SayHentai sayhentai, HentaiVn hentaivn, MimiHentai mimihentai, IConnectionMultiplexer? redis = null, MeilisearchClient? meili = null)
 {
     private async Task<T?> CacheGet<T>(string key) where T : class
     {
@@ -76,10 +76,12 @@ public class Catalog(IMemoryCache cache, VinaHentai vinahentai, SayHentai sayhen
         var n2 = NormalizeTitle(t2);
         if (string.IsNullOrEmpty(n1) || string.IsNullOrEmpty(n2)) return false;
         if (n1 == n2) return true;
+        if (n1.Length > 6 && n2.Length > 6 && (n1.Contains(n2) || n2.Contains(n1))) return true;
+
         var a1 = NormalizeTitle(alt1);
         var a2 = NormalizeTitle(alt2);
-        if (!string.IsNullOrEmpty(a1) && (a1 == n2 || a1 == a2)) return true;
-        if (!string.IsNullOrEmpty(a2) && (n1 == a2)) return true;
+        if (!string.IsNullOrEmpty(a1) && (a1 == n2 || a1 == a2 || (a1.Length > 6 && n2.Length > 6 && (a1.Contains(n2) || n2.Contains(a1))))) return true;
+        if (!string.IsNullOrEmpty(a2) && (n1 == a2 || (n1.Length > 6 && a2.Length > 6 && (n1.Contains(a2) || a2.Contains(n1))))) return true;
         return false;
     }
 
@@ -119,6 +121,18 @@ public class Catalog(IMemoryCache cache, VinaHentai vinahentai, SayHentai sayhen
             await sem.WaitAsync(cts.Token);
             try
             {
+                var mSlug = await mimihentai.ResolveSlug(m.Id);
+                if (!string.IsNullOrEmpty(mSlug))
+                {
+                    var chaps = await mimihentai.GetChapters(m.Id, 1, 10, ascending: false);
+                    if (chaps != null && chaps.Items.Count > 0)
+                    {
+                        var existing = m.Chapters ?? [];
+                        m.Chapters = DeduplicateChapters(existing.Concat(chaps.Items), ascending: false).Take(targetCount).ToList();
+                        return;
+                    }
+                }
+
                 var vSlug = await vinahentai.ResolveSlug(m.Id);
                 if (!string.IsNullOrEmpty(vSlug))
                 {
@@ -169,32 +183,90 @@ public class Catalog(IMemoryCache cache, VinaHentai vinahentai, SayHentai sayhen
         catch { }
     }
 
+    public static bool IsManhwa(MangaCard m)
+    {
+        if (m == null) return false;
+
+        if (!string.IsNullOrWhiteSpace(m.Country) && (m.Country.Equals("ko", StringComparison.OrdinalIgnoreCase) || m.Country.Contains("manhwa", StringComparison.OrdinalIgnoreCase)))
+            return true;
+
+        if (m.Genres != null && m.Genres.Any(g => 
+            g.Contains("manhwa", StringComparison.OrdinalIgnoreCase) || 
+            g.Contains("webtoon", StringComparison.OrdinalIgnoreCase) ||
+            g.Contains("truyện hàn", StringComparison.OrdinalIgnoreCase) ||
+            g.Contains("hàn quốc", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        if (Regex.IsMatch(m.Title ?? "", @"\b(manhwa|webtoon)\b|\[manhwa\]|\[webtoon\]", RegexOptions.IgnoreCase))
+            return true;
+
+        if (Regex.IsMatch(m.AlternativeTitle ?? "", @"\b(manhwa|webtoon)\b|\[manhwa\]|\[webtoon\]", RegexOptions.IgnoreCase))
+            return true;
+
+        return false;
+    }
+
     public async Task<CatalogPage> Home(int page, int size)
     {
-        var cacheKey = $"catalog:home:vinahentai:v2:{page}:{size}";
+        var cacheKey = $"catalog:home:v7:{page}:{size}";
         var cachedPage = await CacheGet<CatalogPage>(cacheKey);
         if (cachedPage != null) return cachedPage;
 
-        // 1. Fetch latest updated manga from VinaHentai
-        var vinaItems = new List<MangaCard>();
+        // 1. Fetch latest updated manga from MimiHentai and VinaHentai concurrently
+        var mimiTask = mimihentai.GetLatest(page, size);
+        var vinaTask = vinahentai.GetLatest(page);
+
         try
         {
-            vinaItems = await vinahentai.GetLatest(page);
+            await Task.WhenAll(mimiTask, vinaTask);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[Catalog.Home] VinaHentai fetch warning: {ex.Message}");
+            Console.WriteLine($"[Catalog.Home] Fetch warning: {ex.Message}");
         }
 
-        if (vinaItems != null && vinaItems.Count > 0)
+        var mimiItems = mimiTask.IsCompletedSuccessfully ? (mimiTask.Result ?? []) : [];
+        var vinaItems = vinaTask.IsCompletedSuccessfully ? (vinaTask.Result ?? []) : [];
+
+        var combined = new List<MangaCard>();
+        var max = Math.Max(mimiItems.Count, vinaItems.Count);
+
+        // Interleave items from both APIs while deduplicating by title and excluding Manhwa
+        for (int i = 0; i < max; i++)
         {
-            const int totalEstimated = 39680;
-            var result = new CatalogPage(vinaItems, totalEstimated, page, vinaItems.Count);
-            await CacheSet(cacheKey, result, TimeSpan.FromMinutes(10));
+            if (i < mimiItems.Count)
+            {
+                var m = mimiItems[i];
+                if (!IsManhwa(m) && !combined.Any(existing => IsSameManga(existing.Title, existing.AlternativeTitle, m.Title, m.AlternativeTitle)))
+                {
+                    combined.Add(m);
+                }
+            }
+
+            if (i < vinaItems.Count)
+            {
+                var v = vinaItems[i];
+                if (!IsManhwa(v) && !combined.Any(existing => IsSameManga(existing.Title, existing.AlternativeTitle, v.Title, v.AlternativeTitle)))
+                {
+                    combined.Add(v);
+                }
+            }
+        }
+
+        if (combined.Count > 0)
+        {
+            var finalItems = combined.Take(size).ToList();
+            await EnsureTopChapters(finalItems, 3);
+
+            const int totalEstimated = 71500;
+            var result = new CatalogPage(finalItems, totalEstimated, page, size);
+            await CacheSet(cacheKey, result, TimeSpan.FromMinutes(5));
             return result;
         }
 
-        // 2. Fallback to HentaiVN if VinaHentai is temporarily unreachable
+        // 2. Fallback to HentaiVN if both are temporarily unreachable
         var fallbackItems = await hentaivn.GetLatestManhwa(page);
         var fallbackResult = new CatalogPage(fallbackItems, 1200, page, size);
         return fallbackResult;
@@ -286,7 +358,7 @@ public class Catalog(IMemoryCache cache, VinaHentai vinahentai, SayHentai sayhen
 
     public async Task<CatalogPage> Search(int page, int size, string? q, string? genre, string? status, string? country, string? demographic, string? language, string? sort, int? year)
     {
-        var cacheKey = $"catalog:search:v13:{page}:{size}:{q}:{genre}:{status}:{country}:{demographic}:{language}:{sort}:{year}";
+        var cacheKey = $"catalog:search:v14:{page}:{size}:{q}:{genre}:{status}:{country}:{demographic}:{language}:{sort}:{year}";
         var cachedSearch = await CacheGet<CatalogPage>(cacheKey);
         if (cachedSearch != null)
         {
@@ -303,6 +375,12 @@ public class Catalog(IMemoryCache cache, VinaHentai vinahentai, SayHentai sayhen
                 ? vinahentai.GetByGenre(genre, page)
                 : (isJapan || (noCountryFilter && string.IsNullOrEmpty(genre)) ? vinahentai.GetLatest(page) : Task.FromResult(new List<MangaCard>())));
 
+        var mimiTask = !string.IsNullOrWhiteSpace(q)
+            ? mimihentai.Search(q, page)
+            : (!string.IsNullOrWhiteSpace(genre)
+                ? mimihentai.GetByGenre(genre, page)
+                : (isJapan || (noCountryFilter && string.IsNullOrEmpty(genre)) ? mimihentai.GetLatest(page, size) : Task.FromResult(new List<MangaCard>())));
+
         var hvnTask = !string.IsNullOrWhiteSpace(q)
             ? hentaivn.Search(q, page)
             : (isKorea || (noCountryFilter && string.IsNullOrEmpty(genre)) ? hentaivn.GetLatestManhwa(page) : Task.FromResult(new List<MangaCard>()));
@@ -311,9 +389,10 @@ public class Catalog(IMemoryCache cache, VinaHentai vinahentai, SayHentai sayhen
             ? sayhentai.Search(q, page)
             : (isKorea || (noCountryFilter && string.IsNullOrEmpty(genre)) ? sayhentai.GetLatestManhwa(page) : Task.FromResult(new List<MangaCard>()));
 
-        await Task.WhenAll(vinaTask, hvnTask, sayTask);
+        await Task.WhenAll(vinaTask, mimiTask, hvnTask, sayTask);
 
         var vinaResults = await vinaTask;
+        var mimiResults = await mimiTask;
         var hvnResults = await hvnTask;
         var sayResults = await sayTask;
 
@@ -333,11 +412,21 @@ public class Catalog(IMemoryCache cache, VinaHentai vinahentai, SayHentai sayhen
         else if (isJapan || !string.IsNullOrWhiteSpace(genre))
         {
             foreach (var v in vinaResults) items.Add(v);
-            total = !string.IsNullOrWhiteSpace(q) ? (items.Count >= size ? page * size + size : (page - 1) * size + items.Count) : (vinaResults.Count > 0 ? Math.Max(2400, page * 24 + 48) : items.Count);
+            foreach (var m in mimiResults)
+            {
+                if (!items.Any(existing => IsSameManga(existing.Title, existing.AlternativeTitle, m.Title, m.AlternativeTitle)))
+                    items.Add(m);
+            }
+            total = !string.IsNullOrWhiteSpace(q) ? (items.Count >= size ? page * size + size : (page - 1) * size + items.Count) : (vinaResults.Count > 0 || mimiResults.Count > 0 ? Math.Max(71500, page * 24 + 48) : items.Count);
         }
         else
         {
             foreach (var v in vinaResults) items.Add(v);
+            foreach (var m in mimiResults)
+            {
+                if (!items.Any(existing => IsSameManga(existing.Title, existing.AlternativeTitle, m.Title, m.AlternativeTitle)))
+                    items.Add(m);
+            }
             foreach (var h in hvnResults)
             {
                 if (!items.Any(existing => IsSameManga(existing.Title, existing.AlternativeTitle, h.Title, h.AlternativeTitle)))
@@ -348,7 +437,7 @@ public class Catalog(IMemoryCache cache, VinaHentai vinahentai, SayHentai sayhen
                 if (!items.Any(existing => IsSameManga(existing.Title, existing.AlternativeTitle, s.Title, s.AlternativeTitle)))
                     items.Add(s);
             }
-            total = !string.IsNullOrWhiteSpace(q) ? (items.Count >= size ? page * size + size : (page - 1) * size + items.Count) : Math.Max(39680, items.Count);
+            total = !string.IsNullOrWhiteSpace(q) ? (items.Count >= size ? page * size + size : (page - 1) * size + items.Count) : Math.Max(71500, items.Count);
         }
 
         // Fallback: If external sources returned 0 items and meili is available, search local meili index
@@ -409,7 +498,7 @@ public class Catalog(IMemoryCache cache, VinaHentai vinahentai, SayHentai sayhen
 
     public async Task<MangaCard> Detail(Guid id)
     {
-        var cacheKey = $"catalog:detail:v9:{id}";
+        var cacheKey = $"catalog:detail:v10:{id}";
         var cachedManga = await CacheGet<MangaCard>(cacheKey);
         if (cachedManga != null) return cachedManga;
 
@@ -418,6 +507,13 @@ public class Catalog(IMemoryCache cache, VinaHentai vinahentai, SayHentai sayhen
         {
             await CacheSet(cacheKey, vinaManga, TimeSpan.FromMinutes(20));
             return vinaManga;
+        }
+
+        var mimiManga = await mimihentai.GetDetail(id);
+        if (mimiManga != null)
+        {
+            await CacheSet(cacheKey, mimiManga, TimeSpan.FromMinutes(20));
+            return mimiManga;
         }
 
         var hvnManga = await hentaivn.GetDetail(id);
@@ -450,7 +546,7 @@ public class Catalog(IMemoryCache cache, VinaHentai vinahentai, SayHentai sayhen
 
     public async Task<List<ChapterCard>> GetAllChapters(Guid id, string language)
     {
-        var cacheKey = $"catalog:all_chapters:v9:{id}:{language}";
+        var cacheKey = $"catalog:all_chapters:v10:{id}:{language}";
         var cached = await CacheGet<List<ChapterCard>>(cacheKey);
         if (cached != null && cached.Count > 0) return cached;
 
@@ -460,6 +556,14 @@ public class Catalog(IMemoryCache cache, VinaHentai vinahentai, SayHentai sayhen
             var cleanVina = DeduplicateChapters(vinaChaps.Items, ascending: true);
             await CacheSet(cacheKey, cleanVina, TimeSpan.FromMinutes(20));
             return cleanVina;
+        }
+
+        var mimiChaps = await mimihentai.GetChapters(id, 1, 1000, ascending: true);
+        if (mimiChaps != null && mimiChaps.Items.Count > 0)
+        {
+            var cleanMimi = DeduplicateChapters(mimiChaps.Items, ascending: true);
+            await CacheSet(cacheKey, cleanMimi, TimeSpan.FromMinutes(20));
+            return cleanMimi;
         }
 
         var hvnChaps = await hentaivn.GetChapters(id, 1, 1000, ascending: true);
@@ -528,6 +632,34 @@ public class Catalog(IMemoryCache cache, VinaHentai vinahentai, SayHentai sayhen
             return finalReader;
         }
 
+        var mimiReader = await mimihentai.GetReader(id);
+        if (mimiReader != null)
+        {
+            var mangaId = mimiReader.Chapter.MangaId;
+            var manga = mangaId != Guid.Empty ? await Detail(mangaId) : null;
+            var nav = mangaId != Guid.Empty ? await GetAllChapters(mangaId, "vi") : null;
+            if (nav == null || nav.Count == 0)
+            {
+                nav = mimiReader.Navigation;
+            }
+            if (!nav.Any(x => x.Id == id))
+            {
+                nav.Add(mimiReader.Chapter);
+                nav = DeduplicateChapters(nav, ascending: true);
+            }
+
+            var finalReader = new ReaderData(
+                mimiReader.Chapter,
+                manga ?? mimiReader.Manga,
+                mimiReader.Pages,
+                mimiReader.DataSaverPages,
+                mimiReader.ExternalUrl,
+                nav
+            );
+            await CacheSet(cacheKey, finalReader, TimeSpan.FromMinutes(30));
+            return finalReader;
+        }
+
         var hvnReader = await hentaivn.GetReader(id);
         if (hvnReader != null)
         {
@@ -589,7 +721,20 @@ public class Catalog(IMemoryCache cache, VinaHentai vinahentai, SayHentai sayhen
 
     public async Task<object> Tags()
     {
-        var genres = await vinahentai.GetGenres();
-        return genres.Select(g => new { id = g.Id, name = g.Name, description = g.Description }).ToArray();
+        var vinaGenresTask = vinahentai.GetGenres();
+        var mimiGenresTask = mimihentai.GetGenres();
+        await Task.WhenAll(vinaGenresTask, mimiGenresTask);
+
+        var list = new List<VinaGenre>();
+        foreach (var g in await vinaGenresTask) list.Add(g);
+        foreach (var g in await mimiGenresTask)
+        {
+            if (!list.Any(x => x.Name.Equals(g.Name, StringComparison.OrdinalIgnoreCase)))
+            {
+                list.Add(g);
+            }
+        }
+
+        return list.Select(g => new { id = g.Id, name = g.Name, description = g.Description }).ToArray();
     }
 }

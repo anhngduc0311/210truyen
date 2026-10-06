@@ -40,9 +40,11 @@ if (!string.IsNullOrWhiteSpace(meiliUrl)) {
 builder.Services.AddHttpClient<VinaHentai>(c => { c.Timeout = TimeSpan.FromSeconds(15); c.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"); });
 builder.Services.AddHttpClient<SayHentai>(c => { c.Timeout = TimeSpan.FromSeconds(15); c.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"); });
 builder.Services.AddHttpClient<HentaiVn>(c => { c.Timeout = TimeSpan.FromSeconds(15); c.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"); });
+builder.Services.AddHttpClient<MimiHentai>(c => { c.Timeout = TimeSpan.FromSeconds(15); c.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"); });
 builder.Services.AddSingleton<VinaHentai>();
 builder.Services.AddSingleton<SayHentai>();
 builder.Services.AddSingleton<HentaiVn>();
+builder.Services.AddSingleton<MimiHentai>();
 builder.Services.AddScoped<Catalog>();
 builder.Services.AddScoped<PasswordHasher<AppUser>>();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o => o.TokenValidationParameters = new() {
@@ -113,7 +115,7 @@ app.MapGet("/api/health", async (AppDb db, IServiceProvider sp) => {
             meilisearch = 7709,
             postgres = 54329
         },
-        source = "VinaHentai / HentaiVN / SayHentai"
+        source = "VinaHentai / MimiHentai / HentaiVN / SayHentai"
     });
 });
 app.MapPost("/api/auth/register", async (RegisterRequest req, AppDb db, PasswordHasher<AppUser> hasher) => {
